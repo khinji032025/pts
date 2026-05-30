@@ -26,6 +26,7 @@ export default function PaperView() {
 
   const isAdmin = user?.role === 'admin';
   const currentStatus = paper?.status_action || null;
+  const formatDateTime = (value) => value ? new Date(value).toLocaleString('en-PH') : '—';
 
   const canMarkIn = currentStatus !== 'IN' && currentStatus !== 'DONE';
   const canMarkOut = currentStatus === 'IN';
@@ -36,6 +37,8 @@ export default function PaperView() {
     ['Title', paper.title],
     ['Origin', paper.origin],
     ['Status', <StatusBadge action={paper.status_action} dept={paper.status_dept} />],
+    ['Last Scan Time', formatDateTime(paper.last_scanned_at)],
+    ['Last Scan Department', paper.status_dept || '—'],
     ['Created', <div><div>{new Date(paper.created_at).toLocaleDateString('en-PH', { year:'numeric', month:'long', day:'2-digit' })}</div><div style={{ fontSize:'12px', color:'var(--t3)', marginTop:'4px' }}>{new Date(paper.created_at).toLocaleTimeString('en-PH', { hour:'2-digit', minute:'2-digit', second:'2-digit' })}</div></div>],
   ] : [];
 

@@ -13,6 +13,21 @@ export default function ScanRedirect() {
   const [done, setDone]     = useState('');
   const [error, setError]   = useState('');
 
+  const warningCard = (title, message) => (
+    <div style={styles.bg}>
+      <div style={styles.card}>
+        <div style={styles.header}>⚠️ Warning</div>
+        <div style={{ padding: 24, textAlign: 'center', color: '#8a5b00' }}>
+          <div style={{ fontWeight: 800, fontSize: 18, color: '#7a4b00', marginBottom: 10 }}>{title}</div>
+          <div style={{ fontSize: 14, lineHeight: 1.55 }}>{message}</div>
+        </div>
+        <div style={{ padding: '0 24px 24px', textAlign: 'center' }}>
+          <button style={styles.btnOutline} onClick={() => nav('/dept')}>Go to Dashboard</button>
+        </div>
+      </div>
+    </div>
+  );
+
   useEffect(() => {
     if (authLoading) return;
     if (!user) { nav(`/login?next=/scan/${scannedRef}`); return; }
@@ -43,6 +58,26 @@ export default function ScanRedirect() {
         const preview = await paperAPI.publicView(scannedRef);
         const current = preview.data.paper;
         if (current) {
+          const isAdmin = user?.role === 'admin';
+          const isOriginDept = user?.dept_name && current.origin && user.dept_name === current.origin;
+
+          // Non-admins may only auto-scan a paper if they belong to its origin
+          // department, or if the paper is already finished. This prevents other
+          // departments from scanning unfinished papers that belong to a different
+          // origin department.
+          if (!isAdmin && !isOriginDept && current.status_action !== 'DONE') {
+            setPaper(current);
+            setError(
+              <div>
+                <div>This document belongs to <strong>{current.origin}</strong>.</div>
+                <div style={{ marginTop: 8 }}>Only the origin department or an administrator may scan it until it is marked DONE.</div>
+                <div style={{ marginTop: 12, color: '#555' }}>Current status: <strong>{current.status_action || 'PENDING'}</strong>{current.status_dept ? ` at ${current.status_dept}` : ''}</div>
+              </div>
+            );
+            setLoading(false);
+            return;
+          }
+
           // If it's IN at another department, block auto-scan and warn the user.
           if (current.status_action === 'IN' && current.status_dept && current.status_dept !== user?.dept_name) {
             setPaper(current);

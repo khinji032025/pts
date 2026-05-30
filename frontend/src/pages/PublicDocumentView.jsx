@@ -28,6 +28,8 @@ export default function PublicDocumentView() {
 
   if (loading) return <div className="loading"><div className="spinner" /></div>;
 
+  const formatDateTime = (value) => value ? new Date(value).toLocaleString('en-PH') : '—';
+
   const backToSearch = () => nav('/login');
 
   return (
@@ -63,14 +65,16 @@ export default function PublicDocumentView() {
                 <div className="paper-detail-value">{paper.current_location || '—'}</div>
               </div>
               <div className="paper-detail-item" style={{ marginBottom: 14 }}>
-                <div className="paper-detail-label">Last Scan</div>
-                <div className="paper-detail-value">
-                  {paper.last_scanned_at ? new Date(paper.last_scanned_at).toLocaleString('en-PH') : '—'}
-                </div>
+                <div className="paper-detail-label">Last Scan Time</div>
+                <div className="paper-detail-value">{formatDateTime(paper.last_scanned_at)}</div>
+              </div>
+              <div className="paper-detail-item" style={{ marginBottom: 14 }}>
+                <div className="paper-detail-label">Last Scan Department</div>
+                <div className="paper-detail-value">{paper.status_dept || '—'}</div>
               </div>
               <div className="paper-detail-item">
                 <div className="paper-detail-label">Created</div>
-                <div className="paper-detail-value">{new Date(paper.created_at).toLocaleString('en-PH')}</div>
+                <div className="paper-detail-value">{formatDateTime(paper.created_at)}</div>
               </div>
             </div>
           </div>
