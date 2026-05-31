@@ -26,11 +26,15 @@ export default function PaperView() {
 
   const isAdmin = user?.role === 'admin';
   const currentStatus = paper?.status_action || null;
+  const currentStatusDept = paper?.status_dept || null;
+  const isOriginDept = !!(user?.dept_name && paper?.origin && user.dept_name === paper.origin);
+  const isCurrentDept = !!(user?.dept_name && currentStatusDept && user.dept_name === currentStatusDept);
   const formatDateTime = (value) => value ? new Date(value).toLocaleString('en-PH') : '—';
 
-  const canMarkIn = currentStatus !== 'IN' && currentStatus !== 'DONE';
-  const canMarkOut = currentStatus === 'IN';
-  const canMarkDone = !!currentStatus && currentStatus !== 'DONE';
+  const canMarkIn = isAdmin || currentStatus === 'OUT' || (currentStatus === null && isOriginDept);
+  const canMarkOut = isAdmin || (currentStatus === 'IN' && isCurrentDept);
+  const canMarkDone = isAdmin || (currentStatus === 'IN' && isCurrentDept);
+  const canUseQuickStatus = isAdmin || currentStatus === 'OUT' || (currentStatus === null && isOriginDept) || isCurrentDept;
 
   const detailRows = paper ? [
     ['Ref Code', <span className="mono" style={{ fontSize: 22, fontWeight: 800, color: 'var(--navy)' }}>#{paper.ref_code}</span>],
@@ -190,7 +194,7 @@ export default function PaperView() {
               <div style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
                 <div className="lbl" style={{ marginBottom: 10 }}>Quick Status Update</div>
                 <div className="row">
-                  {(isAdmin || user?.dept_name === paper.origin) ? (
+                  {canUseQuickStatus ? (
                     <>
                       <button
                         className="btn btn-green"
@@ -209,7 +213,7 @@ export default function PaperView() {
                       >✓ Mark Done</button>
                     </>
                   ) : (
-                    <p className="sm muted">Only the origin department can update this paper's status.</p>
+                    <p className="sm muted">Only the origin department can start a paper. After the origin marks OUT, the next department may scan it, and only the current holder may mark OUT or Done.</p>
                   )}
                 </div>
               </div>

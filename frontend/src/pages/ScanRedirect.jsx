@@ -36,19 +36,8 @@ export default function ScanRedirect() {
       try {
         // Guard against duplicate effect execution (e.g., React StrictMode in development)
         const lockKey = `scan-lock-${scannedRef}-${user?.uid || user?.username || 'user'}`;
-        const doneKey = `scan-done-${scannedRef}-${user?.uid || user?.username || 'user'}`;
         const now = Date.now();
         const last = Number(sessionStorage.getItem(lockKey) || 0);
-        // If we've already performed an auto-scan for this ref recently, load details
-        // without triggering another auto-mark. This protects against users
-        // navigating back from the details view which would remount this component
-        // and re-run the effect.
-        if (sessionStorage.getItem(doneKey)) {
-          const r = await paperAPI.publicView(scannedRef);
-          setPaper(r.data.paper);
-          setDone(r.data.paper?.status_action || '');
-          return;
-        }
 
         // Before performing an auto-scan (which may change status), fetch the
         // public details to verify the paper's current holder. Only the
@@ -60,35 +49,43 @@ export default function ScanRedirect() {
         if (current) {
           const isAdmin = user?.role === 'admin';
           const isOriginDept = user?.dept_name && current.origin && user.dept_name === current.origin;
+          const isCurrentDept = user?.dept_name && current.status_dept && user.dept_name === current.status_dept;
 
-          // Non-admins may only auto-scan a paper if they belong to its origin
-          // department, or if the paper is already finished. This prevents other
-          // departments from scanning unfinished papers that belong to a different
-          // origin department.
-          if (!isAdmin && !isOriginDept && current.status_action !== 'DONE') {
-            setPaper(current);
-            setError(
-              <div>
-                <div>This document belongs to <strong>{current.origin}</strong>.</div>
-                <div style={{ marginTop: 8 }}>Only the origin department or an administrator may scan it until it is marked DONE.</div>
-                <div style={{ marginTop: 12, color: '#555' }}>Current status: <strong>{current.status_action || 'PENDING'}</strong>{current.status_dept ? ` at ${current.status_dept}` : ''}</div>
-              </div>
-            );
-            setLoading(false);
-            return;
-          }
+          // Non-admins may only auto-scan a paper when the workflow allows it:
+          // origin department for a fresh paper, the current holder while the
+          // paper is IN, or any department after the origin has already marked
+          // the paper OUT.
+          if (!isAdmin) {
+            if (current.status_action === 'DONE') {
+              setPaper(current);
+              setLoading(false);
+              return;
+            }
 
-          // If it's IN at another department, block auto-scan and warn the user.
-          if (current.status_action === 'IN' && current.status_dept && current.status_dept !== user?.dept_name) {
-            setPaper(current);
-            setError(
-              <div>
-                <div>This document is currently marked IN at <strong>{current.status_dept}</strong>. Only that department may mark it OUT.</div>
-                <div style={{ marginTop: 12, color: '#555' }}>Note: You can access or scan this paper once it has been marked OUT or DONE by the current holder.</div>
-              </div>
-            );
-            setLoading(false);
-            return;
+            if (!current.status_action && !isOriginDept) {
+              setPaper(current);
+              setError(
+                <div>
+                  <div>This document belongs to <strong>{current.origin}</strong>.</div>
+                  <div style={{ marginTop: 8 }}>Only the origin department or an administrator may scan it until it is marked OUT.</div>
+                  <div style={{ marginTop: 12, color: '#555' }}>Current status: <strong>{current.status_action || 'PENDING'}</strong>{current.status_dept ? ` at ${current.status_dept}` : ''}</div>
+                </div>
+              );
+              setLoading(false);
+              return;
+            }
+
+            if (current.status_action === 'IN' && !isCurrentDept) {
+              setPaper(current);
+              setError(
+                <div>
+                  <div>This document is currently marked IN at <strong>{current.status_dept}</strong>.</div>
+                  <div style={{ marginTop: 8 }}>Only that department may mark it OUT.</div>
+                </div>
+              );
+              setLoading(false);
+              return;
+            }
           }
         }
 
@@ -103,9 +100,6 @@ export default function ScanRedirect() {
         const scannedPaper = r.data.paper;
         setPaper(scannedPaper);
         setDone(scannedPaper?.status_action || 'IN');
-        // Remember that we've auto-scanned this ref so we don't auto-mark again
-        // when the user navigates back to this route shortly after.
-        sessionStorage.setItem(doneKey, '1');
       } catch (err) {
         setError(err.response?.data?.error || 'Paper not found.');
       } finally {

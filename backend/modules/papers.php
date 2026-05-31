@@ -8,7 +8,7 @@ cors();
 $action = $_GET['action'] ?? '';
 
 function currentStatus($db, $paper_id) {
-    $st = $db->prepare("SELECT l.action, d.name dept, l.created_at last_scanned_at FROM status_logs l JOIN departments d ON d.id=l.department_id WHERE l.paper_id=? ORDER BY l.created_at DESC LIMIT 1");
+    $st = $db->prepare("SELECT l.action, l.department_id, d.name dept, l.created_at last_scanned_at FROM status_logs l JOIN departments d ON d.id=l.department_id WHERE l.paper_id=? ORDER BY l.created_at DESC, l.id DESC LIMIT 1");
     $st->bind_param('i', $paper_id);
     $st->execute();
     return $st->get_result()->fetch_assoc();
@@ -68,7 +68,7 @@ elseif ($action === 'public_view') {
 
     if (!$paper) err('Paper not found.', 404);
 
-    $st2 = $db->prepare("SELECT l.action, d.name dept FROM status_logs l JOIN departments d ON d.id=l.department_id WHERE l.paper_id=? ORDER BY l.created_at DESC LIMIT 1");
+    $st2 = $db->prepare("SELECT l.action, d.name dept, l.created_at last_scanned_at FROM status_logs l JOIN departments d ON d.id=l.department_id WHERE l.paper_id=? ORDER BY l.created_at DESC, l.id DESC LIMIT 1");
     $st2->bind_param('i', $paper['id']);
     $st2->execute();
     $s = $st2->get_result()->fetch_assoc();
@@ -79,7 +79,7 @@ elseif ($action === 'public_view') {
     $paper['current_location'] = $s['dept'] ?? null;
     $paper['last_scanned_at']  = $s['last_scanned_at'] ?? null;
 
-    $st3 = $db->prepare("SELECT l.*,d.name dept_name,u.username FROM status_logs l JOIN departments d ON d.id=l.department_id JOIN users u ON u.id=l.user_id WHERE l.paper_id=? ORDER BY l.created_at DESC");
+    $st3 = $db->prepare("SELECT l.*,d.name dept_name,u.username FROM status_logs l JOIN departments d ON d.id=l.department_id JOIN users u ON u.id=l.user_id WHERE l.paper_id=? ORDER BY l.created_at DESC, l.id DESC");
     $st3->bind_param('i', $paper['id']);
     $st3->execute();
     $res3 = $st3->get_result();
@@ -114,7 +114,7 @@ elseif ($action === 'view') {
     if (!$paper) err('Not found.', 404);
 
     // current status
-    $st2 = $db->prepare("SELECT l.action, d.name dept FROM status_logs l JOIN departments d ON d.id=l.department_id WHERE l.paper_id=? ORDER BY l.created_at DESC LIMIT 1");
+    $st2 = $db->prepare("SELECT l.action, d.name dept, l.created_at last_scanned_at FROM status_logs l JOIN departments d ON d.id=l.department_id WHERE l.paper_id=? ORDER BY l.created_at DESC, l.id DESC LIMIT 1");
     $st2->bind_param('i', $id);
     $st2->execute();
     $s = $st2->get_result()->fetch_assoc();
@@ -126,7 +126,7 @@ elseif ($action === 'view') {
     $paper['last_scanned_at']  = $s['last_scanned_at'] ?? null;
 
     // logs
-    $st3 = $db->prepare("SELECT l.*,d.name dept_name,u.username FROM status_logs l JOIN departments d ON d.id=l.department_id JOIN users u ON u.id=l.user_id WHERE l.paper_id=? ORDER BY l.created_at DESC");
+    $st3 = $db->prepare("SELECT l.*,d.name dept_name,u.username FROM status_logs l JOIN departments d ON d.id=l.department_id JOIN users u ON u.id=l.user_id WHERE l.paper_id=? ORDER BY l.created_at DESC, l.id DESC");
     $st3->bind_param('i', $id);
     $st3->execute();
     $res = $st3->get_result();
@@ -186,17 +186,39 @@ elseif ($action === 'mark') {
     if (!in_array($act, ['IN','OUT','DONE'])) err('Invalid action.');
 
     $db = getDB();
+    $paperRow = $db->prepare("SELECT origin_department_id FROM papers WHERE id=?");
+    $paperRow->bind_param('i', $paper_id);
+    $paperRow->execute();
+    $paper = $paperRow->get_result()->fetch_assoc();
+    $paperRow->close();
+    if (!$paper) err('Paper not found.', 404);
+
+    $originDept = intval($paper['origin_department_id'] ?? 0);
+    $actorDept = intval($s['dept_id'] ?? 0);
+    $isAdmin = $s['role'] === 'admin';
+
     if (!$dept_id) {
-        $own = $db->prepare("SELECT origin_department_id FROM papers WHERE id=?");
-        $own->bind_param('i', $paper_id);
-        $own->execute();
-        $row = $own->get_result()->fetch_assoc();
-        $dept_id = intval($row['origin_department_id'] ?? 0);
-        $own->close();
+        $dept_id = $originDept;
     }
 
     $current = currentStatus($db, $paper_id);
     $currentAction = $current['action'] ?? null;
+    $currentDeptId = intval($current['department_id'] ?? 0);
+
+    if (!$isAdmin) {
+        if ($currentAction === 'DONE') {
+            err('This paper is already marked DONE.', 400);
+        }
+
+        if ($act === 'IN') {
+            if ($currentAction === null && $actorDept !== $originDept) err('Forbidden.', 403);
+            if ($currentAction === 'IN' && $actorDept !== $currentDeptId) err('Forbidden.', 403);
+        } elseif ($act === 'OUT') {
+            if ($currentAction !== 'IN' || $actorDept !== $currentDeptId) err('Forbidden.', 403);
+        } elseif ($act === 'DONE') {
+            if ($currentAction !== 'IN' || $actorDept !== $currentDeptId) err('Forbidden.', 403);
+        }
+    }
 
     if ($act === 'IN') {
         if ($currentAction === 'IN') err('Duplicate IN. This paper is already marked IN.');
@@ -315,18 +337,38 @@ elseif ($action === 'scan') {
     if (!$paper) err('Paper not found.', 404);
 
     if ($auto) {
-        $latest = $db->prepare("SELECT action, user_id, note, created_at FROM status_logs WHERE paper_id=? ORDER BY created_at DESC, id DESC LIMIT 1");
+        $latest = $db->prepare("SELECT l.action, l.department_id, d.name dept, l.user_id, l.note, l.created_at FROM status_logs l JOIN departments d ON d.id=l.department_id WHERE l.paper_id=? ORDER BY l.created_at DESC, l.id DESC LIMIT 1");
         $latest->bind_param('i', $paper['id']);
         $latest->execute();
         $last = $latest->get_result()->fetch_assoc();
         $latest->close();
 
         $currentAction = $last['action'] ?? null;
+        $currentDeptName = $last['dept'] ?? null;
+        $originDeptName = $paper['origin'] ?? null;
+        $originDeptId = intval($paper['origin_department_id'] ?? 0);
+        $actorDeptId = intval($s['dept_id'] ?? 0);
+        $actorDeptName = $s['dept_name'] ?? null;
+        $isAdmin = $s['role'] === 'admin';
 
-        // Auto toggle flow for scanner:
-        // no status -> IN, IN -> OUT, OUT -> IN
         if ($currentAction === 'DONE') {
             err('This paper is already marked DONE.', 400);
+        }
+
+        if (!$isAdmin) {
+            if ($currentAction === null && $actorDeptId !== intval($paper['origin_department_id'] ?? 0)) {
+                err('Forbidden.', 403);
+            }
+
+            if ($currentAction === 'IN' && $actorDeptName !== $currentDeptName) {
+                err('Forbidden.', 403);
+            }
+
+            if ($currentAction === 'OUT') {
+                if ($actorDeptId === $originDeptId) {
+                    err('Forbidden.', 403);
+                }
+            }
         }
 
         $nextAction = ($currentAction === 'IN') ? 'OUT' : 'IN';
@@ -354,7 +396,7 @@ elseif ($action === 'scan') {
     $paper['current_location'] = $s['dept'] ?? null;
     $paper['last_scanned_at']  = $s['last_scanned_at'] ?? null;
 
-    $st2 = $db->prepare("SELECT l.*,d.name dept_name,u.username FROM status_logs l JOIN departments d ON d.id=l.department_id JOIN users u ON u.id=l.user_id WHERE l.paper_id=? ORDER BY l.created_at DESC");
+    $st2 = $db->prepare("SELECT l.*,d.name dept_name,u.username FROM status_logs l JOIN departments d ON d.id=l.department_id JOIN users u ON u.id=l.user_id WHERE l.paper_id=? ORDER BY l.created_at DESC, l.id DESC");
     $st2->bind_param('i', $paper['id']);
     $st2->execute();
     $res2 = $st2->get_result();
