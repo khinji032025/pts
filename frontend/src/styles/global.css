@@ -63,7 +63,7 @@ body {
 
 /* Tab bar */
 .tabs { background:#fff; border-bottom:2px solid var(--border); padding:0 24px; display:flex; position:sticky; top:58px; z-index:95; }
-.tab  { padding:13px 18px; border:none; background:none; font:inherit; font-size:13px; font-weight:500; color:var(--t2); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; transition:all .15s; position:relative; z-index:1; touch-action:manipulation; -webkit-tap-highlight-color: transparent; }
+.tab  { padding:13px 18px; border:none; background:none; font:inherit; font-size:13px; font-weight:500; color:var(--t2); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; transition:all .15s; position:relative; z-index:1; touch-action:manipulation; -webkit-tap-highlight-color: transparent; pointer-events: auto; }
 .tab:hover { color:var(--navy); }
 .tab.active { color:var(--navy); border-bottom-color:var(--gold); font-weight:600; }
 .admin-secondary-nav {
@@ -75,7 +75,9 @@ body {
   gap:10px;
   position:sticky;
   top:58px;
-  z-index:95;
+  z-index:96;
+  pointer-events: auto;
+  touch-action: auto;
 }
 .admin-tabs {
   flex:1;
@@ -85,17 +87,25 @@ body {
   border-bottom:none;
   background:transparent;
   padding:0;
+  pointer-events: auto;
+  touch-action: auto;
 }
 .admin-history-btn {
   flex:0 0 auto;
   white-space:nowrap;
+  pointer-events: auto !important;
+  touch-action: manipulation;
 }
 .admin-mobile-history {
   display:none;
+  pointer-events: auto;
+  touch-action: auto;
 }
 .admin-history-mobile-btn {
   width:100%;
   justify-content:center;
+  pointer-events: auto !important;
+  touch-action: manipulation;
 }
 
 /* Page */
@@ -139,8 +149,11 @@ body {
   padding:7px 15px; border:none; border-radius:var(--r1);
   font:inherit; font-size:13px; font-weight:500;
   cursor:pointer; transition:all .15s; white-space:nowrap; text-decoration:none;
+  pointer-events: auto;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
-.btn:disabled { opacity:.5; cursor:not-allowed; }
+.btn:disabled { opacity:.5; cursor:not-allowed; pointer-events: none; }
 .btn-navy    { background:var(--navy); color:#fff; }
 .btn-navy:hover:not(:disabled) { background:var(--navy2); }
 .btn-gold    { background:#0052CC; color:#fff; font-weight:600; }
@@ -525,8 +538,9 @@ td { padding:11px 14px; vertical-align:middle; text-align:center; }
   padding-top: 68px;
 }
 .admin-shell .welcome-overlay {
-  z-index: 1100;
+  z-index: 1;
   padding-top: 112px;
+  pointer-events: none !important;
 }
 .welcome-box {
   pointer-events: auto;

@@ -28,6 +28,15 @@ export default function AdminDashboard() {
     }
   }, [loc.state]);
 
+  // Ensure buttons are clickable on mobile by forcing a layout reflow after render
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      // Force a reflow to ensure all elements are properly rendered and interactive
+      void document.documentElement.offsetHeight;
+    }, 100);
+    return () => clearTimeout(timer);
+  }, []);
+
   return (
     <div className="admin-shell">
       <Navbar

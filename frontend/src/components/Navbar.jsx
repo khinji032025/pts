@@ -36,12 +36,19 @@ export default function Navbar({ title, sub, greeting, notifCount = 0, recentPap
       }
     };
 
+    // Handle both mouse and touch events for better mobile compatibility
     document.addEventListener('mousedown', onDocClick);
-    return () => document.removeEventListener('mousedown', onDocClick);
+    document.addEventListener('touchstart', onDocClick);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('touchstart', onDocClick);
+    };
   }, []);
 
   useEffect(() => {
     if (!user || !greeting) return;
+    // Don't show welcome overlay for admin users to avoid blocking interactions on mobile
+    if (user?.role === 'admin') return;
     const key = `pts:welcomeShownFor:${user.id}`;
     try {
       const shown = sessionStorage.getItem(key);
