@@ -199,7 +199,7 @@ export default function Navbar({ title, sub, greeting, notifCount = 0, recentPap
         </div>
       </nav>
       {showPw && <ChangePasswordModal onClose={() => setShowPw(false)} />}
-      {showScan && <ScanModal onClose={() => setShowScan(false)} />}
+      {showScan && <ScanModal onClose={() => setShowScan(false)} markMode />}
       {showDeptUsers && (
         <DepartmentUsersModal
           dept_id={dept_id}

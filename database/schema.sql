@@ -4,6 +4,7 @@ USE pts_db;
 CREATE TABLE IF NOT EXISTS departments (
     id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(100) NOT NULL UNIQUE,
+    abbreviation VARCHAR(20) NOT NULL UNIQUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -20,7 +21,7 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE TABLE IF NOT EXISTS papers (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    ref_code INT NOT NULL UNIQUE,
+    ref_code VARCHAR(50) NOT NULL UNIQUE,
     title VARCHAR(255) NOT NULL,
     origin_department_id INT NOT NULL,
     created_by INT NOT NULL,
@@ -68,15 +69,24 @@ CREATE TABLE IF NOT EXISTS paper_images (
     FOREIGN KEY (uploaded_by) REFERENCES users(id)
 );
 
-CREATE TABLE IF NOT EXISTS ref_counter (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    last_ref INT NOT NULL DEFAULT 0
+CREATE TABLE IF NOT EXISTS dept_ref_counter (
+    department_id INT PRIMARY KEY,
+    next_ref INT NOT NULL DEFAULT 101,
+    FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE CASCADE
 );
-INSERT INTO ref_counter (last_ref) VALUES (0);
 
--- Departments
-INSERT INTO departments (name) VALUES
-('Mayor''s Office'),('MTO'),('HR'),('LYDO'),('Budget Office'),('Army');
+-- Departments with abbreviations
+INSERT INTO departments (name, abbreviation) VALUES
+('Mayor''s Office', 'MO'),
+('MTO', 'MTO'),
+('HR', 'HR'),
+('LYDO', 'LYDO'),
+('Budget Office', 'BO'),
+('Army', 'ARM');
+
+-- Initialize department reference counters
+INSERT INTO dept_ref_counter (department_id, next_ref) VALUES
+(1, 101), (2, 101), (3, 101), (4, 101), (5, 101), (6, 101);
 
 -- Admin users password = admin123
 INSERT INTO users (username, password, role) VALUES

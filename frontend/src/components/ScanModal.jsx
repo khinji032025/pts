@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { paperAPI } from '../utils/api';
 import StatusBadge from './StatusBadge';
 
-export default function ScanModal({ onClose }) {
+export default function ScanModal({ onClose, markMode = false }) {
   const nav = useNavigate();
   const [tab, setTab]       = useState('camera');
   const [ref, setRef]       = useState('');
@@ -80,21 +80,32 @@ export default function ScanModal({ onClose }) {
       const parseRefFromValue = (raw = '') => {
         const v = String(raw).trim();
         if (!v) return null;
-        // Pure number
-        if (/^\d+$/.test(v)) return parseInt(v, 10);
-        // Try to extract from URLs: /document/123, /paper/123, /scan/123, ?ref=123, #123
+        
+        // New format: Department abbreviation + number (e.g., HR101, MTO102)
+        const deptRefPattern = /^([A-Z]+)(\d+)$/;
+        const deptMatch = v.match(deptRefPattern);
+        if (deptMatch) return v; // Return the full formatted ref
+        
+        // Old format: Pure number (for backward compatibility)
+        if (/^\d+$/.test(v)) return v;
+        
+        // Try to extract from URLs: /document/HR101, /paper/HR101, /scan/HR101, ?ref=HR101, #HR101
         const patterns = [
+          /\/document\/([A-Z]+\d+)/i,
+          /\/paper\/([A-Z]+\d+)/i,
+          /\/scan\/([A-Z]+\d+)/i,
+          /(?:[?&]ref=|#)([A-Z]+\d+)/i,
+          // Also support old numeric formats for backward compatibility
           /\/document\/(\d+)/i,
           /\/paper\/(\d+)/i,
           /\/scan\/(\d+)/i,
           /(?:[?&]ref=|#)(\d+)/i,
           /(?:[?&]id=)(\d+)/i,
-          // Handle full URLs with ref in path or query
           /(?:ref|id)\D+(\d+)/i,
         ];
         for (const pattern of patterns) {
           const match = v.match(pattern);
-          if (match && match[1]) return parseInt(match[1], 10);
+          if (match && match[1]) return match[1];
         }
         return null;
       };
@@ -104,9 +115,8 @@ export default function ScanModal({ onClose }) {
         detectLockRef.current = true;
         setScanning(false);
         stopCamera();
-        // Navigate to public document view (no auth required)
-        // This matches the search bar behavior which also uses /document/{ref}
-        nav(`/document/${detectedRef}`);
+        const targetPath = markMode ? '/scan' : '/document';
+        nav(`${targetPath}/${detectedRef}`);
         onClose();
       };
 
@@ -182,7 +192,7 @@ export default function ScanModal({ onClose }) {
         {/* Tabs - Only Camera */}
         <div style={{ display:'flex', borderBottom:'2px solid var(--border)', padding:'0 22px' }}>
           <div style={{ padding:'10px 16px', fontWeight:700, color:'var(--navy)', fontSize:13 }}>
-            📷 Scan Document QR Code
+            {markMode ? '📷 Scan Document QR Code to mark status' : '📷 Scan Document QR Code'}
           </div>
         </div>
 

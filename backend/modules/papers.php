@@ -55,13 +55,13 @@ if ($action === 'list') {
 }
 
 elseif ($action === 'public_view') {
-    $ref = intval($_GET['ref'] ?? 0);
+    $ref = trim($_GET['ref'] ?? '');
     if (!$ref) err('Ref required.');
 
     $db = getDB();
 
     $st = $db->prepare("SELECT p.*,d.name origin FROM papers p JOIN departments d ON d.id=p.origin_department_id WHERE p.ref_code=?");
-    $st->bind_param('i', $ref);
+    $st->bind_param('s', $ref);
     $st->execute();
     $paper = $st->get_result()->fetch_assoc();
     $st->close();
@@ -156,13 +156,58 @@ elseif ($action === 'create') {
     if (!$dept_id) err('Department required.');
 
     $db = getDB();
-    $db->query("UPDATE ref_counter SET last_ref=last_ref+1");
-    $ref = $db->query("SELECT last_ref FROM ref_counter LIMIT 1")->fetch_assoc()['last_ref'];
+    
+    // Get department abbreviation
+    $deptStmt = $db->prepare("SELECT abbreviation FROM departments WHERE id=?");
+    if (!$deptStmt) err('Database error: ' . $db->error);
+    $deptStmt->bind_param('i', $dept_id);
+    $deptStmt->execute();
+    $deptResult = $deptStmt->get_result()->fetch_assoc();
+    $deptStmt->close();
+    
+    if (!$deptResult) err('Department not found.', 404);
+    $abbrev = $deptResult['abbreviation'];
+    
+    // Get current counter for this department
+    $counterStmt = $db->prepare("SELECT next_ref FROM dept_ref_counter WHERE department_id=?");
+    if (!$counterStmt) err('Database error: ' . $db->error);
+    $counterStmt->bind_param('i', $dept_id);
+    $counterStmt->execute();
+    $counterResult = $counterStmt->get_result()->fetch_assoc();
+    $counterStmt->close();
+    
+    // If counter doesn't exist, initialize it
+    if (!$counterResult) {
+        $insertCounterStmt = $db->prepare("INSERT INTO dept_ref_counter (department_id, next_ref) VALUES (?, 101)");
+        if (!$insertCounterStmt) err('Database error: ' . $db->error);
+        $insertCounterStmt->bind_param('i', $dept_id);
+        $insertCounterStmt->execute();
+        $insertCounterStmt->close();
+        $nextRef = 101;
+    } else {
+        $nextRef = intval($counterResult['next_ref']);
+    }
+    
+    // Generate formatted ref code (e.g., HR101, MTO102)
+    $ref = $abbrev . $nextRef;
 
+    // Insert the paper with string ref_code
     $st = $db->prepare("INSERT INTO papers (ref_code,title,origin_department_id,created_by) VALUES (?,?,?,?)");
-    $st->bind_param('isii', $ref, $title, $dept_id, $s['uid']);
-    $st->execute();
+    if (!$st) err('Database prepare error: ' . $db->error);
+    
+    $st->bind_param('ssii', $ref, $title, $dept_id, $s['uid']);
+    if (!$st->execute()) err('Failed to create paper: ' . $st->error);
+    
     $paperId = $db->insert_id;
+    $st->close();
+    
+    // Increment counter for next paper
+    $updateStmt = $db->prepare("UPDATE dept_ref_counter SET next_ref=next_ref+1 WHERE department_id=?");
+    if (!$updateStmt) err('Database error: ' . $db->error);
+    $updateStmt->bind_param('i', $dept_id);
+    $updateStmt->execute();
+    $updateStmt->close();
+    
     ok(['id' => $paperId, 'ref_code' => $ref]);
 }
 
@@ -411,7 +456,7 @@ elseif ($action === 'delete_image') {
 
 elseif ($action === 'scan') {
     $s = requireLogin();
-    $ref = intval($_GET['ref'] ?? 0);
+    $ref = trim($_GET['ref'] ?? '');
     $auto = intval($_GET['auto'] ?? 0) === 1;
     $didAutoMark = false;
     if (!$ref) err('Ref required.');
@@ -419,7 +464,7 @@ elseif ($action === 'scan') {
     $db = getDB();
 
     $st = $db->prepare("SELECT p.*,d.name origin FROM papers p JOIN departments d ON d.id=p.origin_department_id WHERE p.ref_code=?");
-    $st->bind_param('i', $ref);
+    $st->bind_param('s', $ref);
     $st->execute();
     $paper = $st->get_result()->fetch_assoc();
     if (!$paper) err('Paper not found.', 404);

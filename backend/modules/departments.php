@@ -20,13 +20,23 @@ elseif ($action === 'create') {
     $s = requireAdmin();
     $b = body();
     $name = trim($b['name'] ?? '');
+    $abbrev = trim($b['abbreviation'] ?? '');
     if (!$name) err('Name required.');
+    if (!$abbrev) err('Abbreviation required.');
+    
     $db = getDB();
-    $st = $db->prepare("INSERT INTO departments (name) VALUES (?)");
-    $st->bind_param('s', $name);
-    if (!$st->execute()) err('Department already exists.');
+    $st = $db->prepare("INSERT INTO departments (name, abbreviation) VALUES (?, ?)");
+    $st->bind_param('ss', $name, $abbrev);
+    if (!$st->execute()) err('Department already exists or invalid abbreviation.');
     $deptId = $db->insert_id;
-    ok(['id' => $deptId, 'name' => $name]);
+    
+    // Initialize counter for new department
+    $counterStmt = $db->prepare("INSERT INTO dept_ref_counter (department_id, next_ref) VALUES (?, 101)");
+    $counterStmt->bind_param('i', $deptId);
+    $counterStmt->execute();
+    $counterStmt->close();
+    
+    ok(['id' => $deptId, 'name' => $name, 'abbreviation' => $abbrev]);
 }
 
 elseif ($action === 'delete') {
