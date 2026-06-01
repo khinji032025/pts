@@ -97,8 +97,8 @@ export default function LandingPage() {
 
         <div style={{ textAlign: 'center', marginTop: 28, marginBottom: 16 }}>
           <p style={{ fontSize: '12px', color: '#afb3c0', marginBottom: 12, fontWeight: 500 }}>OR</p>
-          <button type="button" className="btn btn-navy" onClick={() => setShowQR(true)}>
-            📱 Scan Document QR Code
+          <button type="button" className="btn btn-navy" onClick={() => setShowQR(true)} style={{ padding: '12px 28px', fontSize: '16px', fontWeight: 600, minHeight: 48 }}>
+            Scan Document QR Code
           </button>
           <p style={{ fontSize: '12px', color: '#9aa0b8', marginTop: 10 }}>Point your camera at a document QR code to view its details instantly</p>
         </div>
