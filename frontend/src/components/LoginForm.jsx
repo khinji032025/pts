@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import LoginQRModal from './LoginQRModal';
 
 export default function LoginForm({ compact = false, onSuccess }) {
   const { login } = useAuth();
@@ -10,7 +9,6 @@ export default function LoginForm({ compact = false, onSuccess }) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [show, setShow] = useState(false);
-  const [showQR, setShowQR] = useState(false);
 
   const handleSuccess = (user) => {
     if (onSuccess) {
@@ -68,13 +66,7 @@ export default function LoginForm({ compact = false, onSuccess }) {
           {busy ? 'Signing in…' : 'Sign In'}
         </button>
         <p className="login-hint">ADMIN and DEPARTMENT accounts sign in here.</p>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
-          <button type="button" className="btn btn-navy" onClick={() => setShowQR(true)}>
-            Open QR Scanner
-          </button>
-        </div>
       </form>
-      {showQR && <LoginQRModal onClose={() => setShowQR(false)} />}
     </>
   );
 }

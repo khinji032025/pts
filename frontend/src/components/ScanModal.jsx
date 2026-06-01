@@ -46,7 +46,7 @@ export default function ScanModal({ onClose }) {
           });
           useJSQR = true;
         } catch {
-          setCamError('Auto-scan is not supported on this browser. Please use the Manual tab to enter the Ref Code.');
+          setCamError('Auto-scan is not supported on this browser. Please use your phone\'s camera app to scan the QR code directly.');
           return;
         }
       } else {
@@ -66,7 +66,7 @@ export default function ScanModal({ onClose }) {
             }
             useJSQR = true;
           } catch {
-            setCamError('Auto-scan is not supported on this device. Please use the Manual tab.');
+            setCamError('Auto-scan is not supported on this device. Please use your phone\'s camera app instead.');
             return;
           }
         }
@@ -80,11 +80,22 @@ export default function ScanModal({ onClose }) {
       const parseRefFromValue = (raw = '') => {
         const v = String(raw).trim();
         if (!v) return null;
+        // Pure number
         if (/^\d+$/.test(v)) return parseInt(v, 10);
-        const m1 = v.match(/\/scan\/(\d+)/i);
-        if (m1) return parseInt(m1[1], 10);
-        const m2 = v.match(/(?:ref=|#)(\d+)/i);
-        if (m2) return parseInt(m2[1], 10);
+        // Try to extract from URLs: /document/123, /paper/123, /scan/123, ?ref=123, #123
+        const patterns = [
+          /\/document\/(\d+)/i,
+          /\/paper\/(\d+)/i,
+          /\/scan\/(\d+)/i,
+          /(?:[?&]ref=|#)(\d+)/i,
+          /(?:[?&]id=)(\d+)/i,
+          // Handle full URLs with ref in path or query
+          /(?:ref|id)\D+(\d+)/i,
+        ];
+        for (const pattern of patterns) {
+          const match = v.match(pattern);
+          if (match && match[1]) return parseInt(match[1], 10);
+        }
         return null;
       };
 
@@ -93,16 +104,10 @@ export default function ScanModal({ onClose }) {
         detectLockRef.current = true;
         setScanning(false);
         stopCamera();
-        try {
-          const r = await paperAPI.scan(detectedRef);
-          const found = r.data.paper;
-          setResult(found);
-          nav(`/scan/${found.ref_code}`);
-          onClose();
-        } catch {
-          setCamError('Scanned code is not a valid paper reference. Try again or use Manual tab.');
-          detectLockRef.current = false;
-        }
+        // Navigate to public document view (no auth required)
+        // This matches the search bar behavior which also uses /document/{ref}
+        nav(`/document/${detectedRef}`);
+        onClose();
       };
 
       const loop = async () => {
@@ -136,7 +141,7 @@ export default function ScanModal({ onClose }) {
 
       rafRef.current = requestAnimationFrame(loop);
     } catch {
-      setCamError('Camera blocked on HTTP. Use the Manual tab to enter the Ref Code, or scan the QR with your phone camera app directly.');
+      setCamError('Camera access blocked or not available on HTTP. Please use your phone\'s native camera app to scan the QR code directly.');
     }
   };
 
@@ -174,21 +179,16 @@ export default function ScanModal({ onClose }) {
           <button className="btn btn-outline btn-sm" onClick={() => { stopCamera(); onClose(); }}>✕</button>
         </div>
 
-        {/* Tabs */}
+        {/* Tabs - Only Camera */}
         <div style={{ display:'flex', borderBottom:'2px solid var(--border)', padding:'0 22px' }}>
-          {[['camera','📷 Camera'],['manual','✏️ Manual']].map(([k,label]) => (
-            <button key={k} onClick={() => setTab(k)}
-              style={{ padding:'10px 16px', border:'none', background:'none', fontWeight: tab===k ? 700 : 400,
-                color: tab===k ? 'var(--navy)' : 'var(--t2)', borderBottom: tab===k ? '2px solid var(--gold)' : '2px solid transparent',
-                marginBottom:-2, cursor:'pointer', fontSize:13 }}>
-              {label}
-            </button>
-          ))}
+          <div style={{ padding:'10px 16px', fontWeight:700, color:'var(--navy)', fontSize:13 }}>
+            📷 Scan Document QR Code
+          </div>
         </div>
 
         <div className="modal-body">
           {/* Camera tab */}
-          {tab === 'camera' && (
+          {(tab === 'camera' || true) && (
             <div>
               {camError ? (
                 <div>
@@ -198,9 +198,6 @@ export default function ScanModal({ onClose }) {
                     <div style={{ fontWeight:600, color:'var(--navy)', marginBottom:6 }}>Use Phone Camera Instead</div>
                     <div className="sm muted">Open your phone's native camera app and point it at the QR code on the document. It will open the paper directly.</div>
                   </div>
-                  <button className="btn btn-outline btn-full mt4" onClick={() => setTab('manual')}>
-                    Or use Manual Entry →
-                  </button>
                 </div>
               ) : (
                 <div>
@@ -215,8 +212,8 @@ export default function ScanModal({ onClose }) {
             </div>
           )}
 
-          {/* Manual tab */}
-          {tab === 'manual' && (
+          {/* Manual tab - HIDDEN */}
+          {false && tab === 'manual' && (
             <div>
               {error && <div className="alert a-err">{error}</div>}
               <form onSubmit={lookup} style={{ display:'flex', gap:8 }}>

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import LoginModal from '../components/LoginModal';
+import ScanModal from '../components/ScanModal';
 import './LandingPage.css';
 
 export default function LandingPage() {
@@ -9,6 +10,7 @@ export default function LandingPage() {
   const [error, setError] = useState('');
   const [warning, setWarning] = useState('');
   const [showLogin, setShowLogin] = useState(false);
+  const [showQR, setShowQR] = useState(false);
   const [isDesktop, setIsDesktop] = useState(true);
 
   useEffect(() => {
@@ -92,9 +94,18 @@ export default function LandingPage() {
           {error && <div className="search-error">{error}</div>}
           {warning && !error && <div className="search-warning">{warning}</div>}
         </form>
+
+        <div style={{ textAlign: 'center', marginTop: 28, marginBottom: 16 }}>
+          <p style={{ fontSize: '12px', color: '#afb3c0', marginBottom: 12, fontWeight: 500 }}>OR</p>
+          <button type="button" className="btn btn-navy" onClick={() => setShowQR(true)}>
+            📱 Scan Document QR Code
+          </button>
+          <p style={{ fontSize: '12px', color: '#9aa0b8', marginTop: 10 }}>Point your camera at a document QR code to view its details instantly</p>
+        </div>
       </main>
 
       {showLogin && <LoginModal onClose={() => setShowLogin(false)} />}
+      {showQR && <ScanModal onClose={() => setShowQR(false)} />}
     </div>
   );
 }
