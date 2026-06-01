@@ -181,6 +181,7 @@ elseif ($action === 'mark') {
     $paper_id = intval($b['paper_id'] ?? 0);
     $act      = $b['action'] ?? '';
     $dept_id  = intval($b['dept_id'] ?? $s['dept_id'] ?? 0);
+    $person   = trim($b['person'] ?? '');
     $note     = $b['note'] ?? 'manual';
 
     if (!in_array($act, ['IN','OUT','DONE'])) err('Invalid action.');
@@ -211,12 +212,13 @@ elseif ($action === 'mark') {
         }
 
         if ($act === 'IN') {
-            if ($currentAction === null && $actorDept !== $originDept) err('Forbidden.', 403);
+            // For new papers (no status yet), any department can mark IN (marker role check below will validate)
+            // For papers already marked IN, only the current holder can mark IN again (which is a duplicate check)
             if ($currentAction === 'IN' && $actorDept !== $currentDeptId) err('Forbidden.', 403);
         } elseif ($act === 'OUT') {
             if ($currentAction !== 'IN' || $actorDept !== $currentDeptId) err('Forbidden.', 403);
         } elseif ($act === 'DONE') {
-            if ($currentAction !== 'IN' || $actorDept !== $currentDeptId) err('Forbidden.', 403);
+            if (!in_array($currentAction, ['IN', 'OUT']) || $actorDept !== $currentDeptId) err('Forbidden.', 403);
         }
     }
 
@@ -248,9 +250,12 @@ elseif ($action === 'mark') {
     } elseif ($act === 'DONE') {
         if (!$currentAction) err('Please mark IN first before marking DONE.');
         if ($currentAction === 'DONE') err('Duplicate DONE. This paper is already marked DONE.');
+        if (!in_array($currentAction, ['IN', 'OUT'])) err('You can only mark DONE from IN or OUT status.');
     }
 
-    $person = $s['username'];
+    if ($person === '') {
+        $person = $s['username'];
+    }
     $st = $db->prepare("INSERT INTO status_logs (paper_id,action,department_id,user_id,person,note) VALUES (?,?,?,?,?,?)");
     $st->bind_param('isiiss', $paper_id, $act, $dept_id, $s['uid'], $person, $note);
     $st->execute();
@@ -262,12 +267,71 @@ elseif ($action === 'edit_log') {
     $id = intval($_GET['id'] ?? 0);
     $b = body();
     $act  = $b['action'] ?? '';
+    $person = trim($b['person'] ?? '');
     $note = $b['note'] ?? '';
     $db = getDB();
-    $st = $db->prepare("UPDATE status_logs SET action=?,note=? WHERE id=?");
-    $st->bind_param('ssi', $act, $note, $id);
+    $st = $db->prepare("UPDATE status_logs SET action=?,person=?,note=? WHERE id=?");
+    $st->bind_param('sssi', $act, $person, $note, $id);
     $st->execute();
     ok();
+}
+
+elseif ($action === 'undo_mark') {
+    $s = requireLogin();
+    $paper_id = intval($_GET['paper_id'] ?? 0);
+    if (!$paper_id) err('Paper ID required.');
+
+    $db = getDB();
+    $current = currentStatus($db, $paper_id);
+    $currentAction = $current['action'] ?? null;
+    $currentDeptId = intval($current['department_id'] ?? 0);
+    $isAdmin = $s['role'] === 'admin';
+
+    // Only allow undo if current status is DONE
+    if ($currentAction !== 'DONE') {
+        err('Can only undo DONE status.', 400);
+    }
+
+    // Only admin or the department that marked DONE can undo
+    if (!$isAdmin) {
+        $actorDept = intval($s['dept_id'] ?? 0);
+        if ($actorDept !== $currentDeptId) {
+            err('Forbidden.', 403);
+        }
+    }
+
+    // Revert DONE back to the previous non-DONE status (e.g., OUT) by inserting a new log
+    // Get the latest log (should be DONE)
+    $st = $db->prepare("SELECT id,department_id,action,created_at FROM status_logs WHERE paper_id=? ORDER BY created_at DESC, id DESC LIMIT 1");
+    $st->bind_param('i', $paper_id);
+    $st->execute();
+    $last = $st->get_result()->fetch_assoc();
+    $st->close();
+    if (!$last || ($last['action'] ?? '') !== 'DONE') err('Latest log is not DONE.', 400);
+
+    // Find the most recent previous non-DONE action
+    $st2 = $db->prepare("SELECT action, department_id FROM status_logs WHERE paper_id=? AND action!='DONE' ORDER BY created_at DESC, id DESC LIMIT 1");
+    $st2->bind_param('i', $paper_id);
+    $st2->execute();
+    $prev = $st2->get_result()->fetch_assoc();
+    $st2->close();
+
+    if ($prev && !empty($prev['action'])) {
+        $action_val = $prev['action'];
+        $dept_id = intval($prev['department_id'] ?? $currentDeptId);
+    } else {
+        // Fallback to IN if no previous non-DONE entry exists
+        $action_val = 'IN';
+        $dept_id = $currentDeptId;
+    }
+
+    $person = $s['username'];
+    $note = 'undo: reverted from DONE to ' . $action_val;
+
+    $ins = $db->prepare("INSERT INTO status_logs (paper_id,action,department_id,user_id,person,note) VALUES (?,?,?,?,?,?)");
+    $ins->bind_param('isiiss', $paper_id, $action_val, $dept_id, $s['uid'], $person, $note);
+    $ins->execute();
+    ok(['message' => "Status reverted to $action_val"]);
 }
 
 elseif ($action === 'upload_image') {
@@ -374,10 +438,8 @@ elseif ($action === 'scan') {
         }
 
         if (!$isAdmin) {
-            if ($currentAction === null && $actorDeptId !== intval($paper['origin_department_id'] ?? 0)) {
-                err('Forbidden.', 403);
-            }
-
+            // For new papers (no status yet), any department can scan (marker role check below will validate)
+            // For papers already marked IN, only the current holder can scan to mark OUT
             if ($currentAction === 'IN' && $actorDeptName !== $currentDeptName) {
                 err('Forbidden.', 403);
             }

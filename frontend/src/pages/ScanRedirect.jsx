@@ -53,29 +53,15 @@ export default function ScanRedirect() {
         const current = preview.data.paper;
         if (current) {
           const isAdmin = user?.role === 'admin';
-          const isOriginDept = user?.dept_name && current.origin && user.dept_name === current.origin;
           const isCurrentDept = user?.dept_name && current.status_dept && user.dept_name === current.status_dept;
 
           // Non-admins may only auto-scan a paper when the workflow allows it:
-          // origin department for a fresh paper, the current holder while the
-          // paper is IN, or any department after the origin has already marked
-          // the paper OUT.
+          // For new papers: any department can scan if they have the correct marker role
+          // For papers marked IN: only the current holder can scan to mark OUT
+          // For papers marked OUT: any department can scan to mark IN
           if (!isAdmin) {
             if (current.status_action === 'DONE') {
               setPaper(current);
-              setLoading(false);
-              return;
-            }
-
-            if (!current.status_action && !isOriginDept) {
-              setPaper(current);
-              setError(
-                <div>
-                  <div>This document belongs to <strong>{current.origin}</strong>.</div>
-                  <div style={{ marginTop: 8 }}>Only the origin department or an administrator may scan it until it is marked OUT.</div>
-                  <div style={{ marginTop: 12, color: '#555' }}>Current status: <strong>{current.status_action || 'PENDING'}</strong>{current.status_dept ? ` at ${current.status_dept}` : ''}</div>
-                </div>
-              );
               setLoading(false);
               return;
             }

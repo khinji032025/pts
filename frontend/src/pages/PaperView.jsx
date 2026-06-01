@@ -16,6 +16,7 @@ export default function PaperView() {
   const [paper, setPaper]     = useState(null);
   const [loading, setLoading] = useState(true);
   const [editLog, setEditLog] = useState(null);
+  const [personName, setPersonName] = useState(user?.username || '');
   const [msg, setMsg]         = useState('');
   const [error, setError]     = useState('');
   const [previewImage, setPreviewImage] = useState(null);
@@ -31,10 +32,10 @@ export default function PaperView() {
   const isCurrentDept = !!(user?.dept_name && currentStatusDept && user.dept_name === currentStatusDept);
   const formatDateTime = (value) => value ? new Date(value).toLocaleString('en-PH') : '—';
 
-  const canMarkIn = isAdmin || currentStatus === 'OUT' || (currentStatus === null && isOriginDept);
+  const canMarkIn = isAdmin || currentStatus === 'OUT' || currentStatus === null;
   const canMarkOut = isAdmin || (currentStatus === 'IN' && isCurrentDept);
-  const canMarkDone = isAdmin || (currentStatus === 'IN' && isCurrentDept);
-  const canUseQuickStatus = isAdmin || currentStatus === 'OUT' || (currentStatus === null && isOriginDept) || isCurrentDept;
+  const canMarkDone = isAdmin || ((currentStatus === 'IN' || currentStatus === 'OUT') && isCurrentDept);
+  const canUseQuickStatus = isAdmin || currentStatus === 'OUT' || currentStatus === null || isCurrentDept;
 
   const detailRows = paper ? [
     ['Ref Code', <span className="mono" style={{ fontSize: 22, fontWeight: 800, color: 'var(--navy)' }}>#{paper.ref_code}</span>],
@@ -59,12 +60,13 @@ export default function PaperView() {
         action === 'OUT' && currentStatus === 'OUT' ? 'Duplicate OUT. This paper is already marked OUT.' :
         action === 'DONE' && !currentStatus ? 'Please mark IN first before marking DONE.' :
         action === 'DONE' && currentStatus === 'DONE' ? 'Duplicate DONE. This paper is already marked DONE.' :
+        action === 'DONE' && currentStatus === 'DONE' ? 'Duplicate DONE. This paper is already marked DONE.' :
         'This status update is not allowed right now.';
       setMsg(`⚠️ ${warning}`);
       setTimeout(() => setMsg(''), 3500);
       return;
     }
-    await mark(action);
+    await mark(action, personName.trim() || user?.username || '');
   };
 
   const load = async () => {
@@ -80,9 +82,13 @@ export default function PaperView() {
 
   useEffect(() => { load(); }, [id]);
 
-  const mark = async (action) => {
+  useEffect(() => {
+    if (user?.username) setPersonName(user.username);
+  }, [user?.username]);
+
+  const mark = async (action, person) => {
     try {
-      await paperAPI.mark({ paper_id: parseInt(id), action, dept_id: user.dept_id, note: 'manual' });
+      await paperAPI.mark({ paper_id: parseInt(id), action, dept_id: user.dept_id, note: 'manual', person });
       setMsg(`Marked ${action}.`);
       load();
       setTimeout(() => setMsg(''), 3000);
@@ -91,9 +97,20 @@ export default function PaperView() {
     }
   };
 
+  const undoMark = async () => {
+    try {
+      await paperAPI.undoMark(parseInt(id));
+      setMsg('Status reverted to IN.');
+      load();
+      setTimeout(() => setMsg(''), 3000);
+    } catch (err) {
+      setMsg('Error: ' + (err.response?.data?.error || 'Failed to undo'));
+    }
+  };
+
   const saveLog = async () => {
     try {
-      await paperAPI.editLog(editLog.id, { action: editLog.action, note: editLog.note });
+      await paperAPI.editLog(editLog.id, { action: editLog.action, person: editLog.person || '', note: editLog.note });
       setEditLog(null);
       load();
     } catch {}
@@ -193,9 +210,31 @@ export default function PaperView() {
 
               <div style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
                 <div className="lbl" style={{ marginBottom: 10 }}>Quick Status Update</div>
-                <div className="row">
-                  {canUseQuickStatus ? (
-                    <>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 12 }}>
+                  {currentStatus !== 'DONE' && (
+                    <div>
+                      <label className="lbl" style={{ display: 'block', marginBottom: 6 }}>Person</label>
+                      <input
+                        className="inp"
+                        type="text"
+                        value={personName}
+                        placeholder="Name of person who submitted/marked this paper"
+                        onChange={e => setPersonName(e.target.value)}
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+                  )}
+                  {currentStatus === 'DONE' ? (
+                    <div>
+                      <p className="sm muted" style={{ marginBottom: 12 }}>This paper is marked as completed.</p>
+                      <button
+                        className="btn btn-outline"
+                        onClick={undoMark}
+                        style={{ width: '100%' }}
+                      >↶ Undo</button>
+                    </div>
+                  ) : canUseQuickStatus ? (
+                    <div className="row">
                       <button
                         className="btn btn-green"
                         onClick={() => attemptMark('IN')}
@@ -211,7 +250,7 @@ export default function PaperView() {
                         onClick={() => attemptMark('DONE')}
                         style={{ opacity: canMarkDone ? 1 : 0.45, cursor: canMarkDone ? 'pointer' : 'not-allowed' }}
                       >✓ Mark Done</button>
-                    </>
+                    </div>
                   ) : (
                     <p className="sm muted">Only the origin department can start a paper. After the origin marks OUT, the next department may scan it, and only the current holder may mark OUT or Done.</p>
                   )}
@@ -302,7 +341,11 @@ export default function PaperView() {
                     </td>
                     <td>{log.dept_name}</td>
                     <td className="sm muted">{log.username}</td>
-                    <td className="sm">{log.person || '—'}</td>
+                    <td className="sm">
+                      {editLog?.id === log.id
+                        ? <input className="inp" style={{ width: 140 }} value={editLog.person} onChange={e => setEditLog(l => ({ ...l, person: e.target.value }))} />
+                        : log.person || '—'}
+                    </td>
                     <td>
                       {editLog?.id === log.id
                         ? <input className="inp" style={{ width: 110 }} value={editLog.note} onChange={e => setEditLog(l => ({ ...l, note: e.target.value }))} />
@@ -315,7 +358,7 @@ export default function PaperView() {
                               <button className="btn btn-navy btn-sm" onClick={saveLog}>Save</button>
                               <button className="btn btn-outline btn-sm" onClick={() => setEditLog(null)}>Cancel</button>
                             </div>
-                          : <button className="btn btn-outline btn-sm" onClick={() => setEditLog({ id: log.id, action: log.action, note: log.note || '' })}>Edit</button>}
+                          : <button className="btn btn-outline btn-sm" onClick={() => setEditLog({ id: log.id, action: log.action, person: log.person || '', note: log.note || '' })}>Edit</button>}
                       </td>
                     )}
                   </tr>
