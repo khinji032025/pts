@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { deptAPI } from '../../utils/api';
+import { deptAPI, authAPI } from '../../utils/api';
 
 export default function AdminDepartments() {
   const [depts, setDepts]   = useState([]);
@@ -18,14 +18,41 @@ export default function AdminDepartments() {
 
   const add = async (e) => {
     e.preventDefault(); setError(''); setOk('');
-    try { await deptAPI.create({ name }); setName(''); setOk(`"${name}" added.`); load(); }
-    catch (err) { setError(err.response?.data?.error || 'Failed.'); }
+    try {
+      const r = await deptAPI.create({ name });
+      const deptId = r.data.id;
+      try {
+        await authAPI.logAdminActivity({
+          action: 'Create Department',
+          target_type: 'department',
+          target_id: deptId,
+          details: `Created department ${name}`,
+        });
+      } catch (logErr) {
+        console.error('Admin activity log failed', logErr);
+      }
+      setName('');
+      setOk(`"${name}" added.`);
+      load();
+    } catch (err) { setError(err.response?.data?.error || 'Failed.'); }
   };
 
   const del = async (d) => {
     if (!window.confirm(`Delete "${d.name}"?`)) return;
-    try { await deptAPI.delete(d.id); load(); }
-    catch (err) { alert(err.response?.data?.error || 'Failed.'); }
+    try {
+      await deptAPI.delete(d.id);
+      try {
+        await authAPI.logAdminActivity({
+          action: 'Delete Department',
+          target_type: 'department',
+          target_id: d.id,
+          details: `Deleted department ${d.name}`,
+        });
+      } catch (logErr) {
+        console.error('Admin activity log failed', logErr);
+      }
+      load();
+    } catch (err) { alert(err.response?.data?.error || 'Failed.'); }
   };
 
   return (

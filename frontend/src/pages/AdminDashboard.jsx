@@ -7,6 +7,7 @@ import AdminUsers from './admin/AdminUsers';
 import AdminPapers from './admin/AdminPapers';
 import usePaperNotifications from '../hooks/usePaperNotifications';
 import LoginHistoryModal from '../components/LoginHistoryModal';
+import AdminActivityHistoryModal from '../components/AdminActivityHistoryModal';
 
 const TABS = [
   { key:'departments', label:'🏢 Departments' },
@@ -19,6 +20,7 @@ export default function AdminDashboard() {
   const loc = useLocation();
   const [tab, setTab] = useState('departments');
   const [showLoginHistory, setShowLoginHistory] = useState(false);
+  const [showAdminActivityHistory, setShowAdminActivityHistory] = useState(false);
   const { notifCount, recentPapers, markNotificationsSeen, markNotificationRead } = usePaperNotifications();
 
   useEffect(() => {
@@ -59,10 +61,16 @@ export default function AdminDashboard() {
         <button type="button" className="btn btn-outline btn-sm admin-history-btn" onClick={() => setShowLoginHistory(true)}>
           📜 Log History
         </button>
+        <button type="button" className="btn btn-outline btn-sm admin-history-btn" onClick={() => setShowAdminActivityHistory(true)}>
+          🧾 Admin Activity History
+        </button>
       </div>
       <div className="admin-mobile-history">
         <button type="button" className="btn btn-outline btn-sm admin-history-mobile-btn" onClick={() => setShowLoginHistory(true)}>
           📜 Log History
+        </button>
+        <button type="button" className="btn btn-outline btn-sm admin-history-mobile-btn" onClick={() => setShowAdminActivityHistory(true)}>
+          🧾 Admin Activity History
         </button>
       </div>
       <div className="page">
@@ -71,6 +79,7 @@ export default function AdminDashboard() {
         {tab === 'papers'      && <AdminPapers />}
       </div>
       {showLoginHistory && <LoginHistoryModal onClose={() => setShowLoginHistory(false)} />}
+      {showAdminActivityHistory && <AdminActivityHistoryModal onClose={() => setShowAdminActivityHistory(false)} />}
     </div>
   );
 }

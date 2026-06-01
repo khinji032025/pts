@@ -17,7 +17,7 @@ if ($action === 'list') {
 }
 
 elseif ($action === 'create') {
-    requireAdmin();
+    $s = requireAdmin();
     $b = body();
     $name = trim($b['name'] ?? '');
     if (!$name) err('Name required.');
@@ -25,11 +25,12 @@ elseif ($action === 'create') {
     $st = $db->prepare("INSERT INTO departments (name) VALUES (?)");
     $st->bind_param('s', $name);
     if (!$st->execute()) err('Department already exists.');
-    ok(['id' => $db->insert_id, 'name' => $name]);
+    $deptId = $db->insert_id;
+    ok(['id' => $deptId, 'name' => $name]);
 }
 
 elseif ($action === 'delete') {
-    requireAdmin();
+    $s = requireAdmin();
     $id = intval($_GET['id'] ?? 0);
     $db = getDB();
     $ch = $db->prepare("SELECT COUNT(*) c FROM users WHERE department_id=?");

@@ -162,16 +162,18 @@ elseif ($action === 'create') {
     $st = $db->prepare("INSERT INTO papers (ref_code,title,origin_department_id,created_by) VALUES (?,?,?,?)");
     $st->bind_param('isii', $ref, $title, $dept_id, $s['uid']);
     $st->execute();
-    ok(['id' => $db->insert_id, 'ref_code' => $ref]);
+    $paperId = $db->insert_id;
+    ok(['id' => $paperId, 'ref_code' => $ref]);
 }
 
 elseif ($action === 'delete') {
-    requireAdmin();
+    $s = requireAdmin();
     $id = intval($_GET['id'] ?? 0);
     $db = getDB();
     $st = $db->prepare("DELETE FROM papers WHERE id=?");
     $st->bind_param('i', $id);
     $st->execute();
+    logAdminActivity($db, $s, 'Delete Paper', 'paper', $id, "Deleted paper id {$id}");
     ok();
 }
 
@@ -263,7 +265,7 @@ elseif ($action === 'mark') {
 }
 
 elseif ($action === 'edit_log') {
-    requireAdmin();
+    $s = requireAdmin();
     $id = intval($_GET['id'] ?? 0);
     $b = body();
     $act  = $b['action'] ?? '';
@@ -273,6 +275,7 @@ elseif ($action === 'edit_log') {
     $st = $db->prepare("UPDATE status_logs SET action=?,person=?,note=? WHERE id=?");
     $st->bind_param('sssi', $act, $person, $note, $id);
     $st->execute();
+    logAdminActivity($db, $s, 'Edit Paper Log', 'status_log', $id, "Updated status log id {$id} to {$act}");
     ok();
 }
 
@@ -331,6 +334,9 @@ elseif ($action === 'undo_mark') {
     $ins = $db->prepare("INSERT INTO status_logs (paper_id,action,department_id,user_id,person,note) VALUES (?,?,?,?,?,?)");
     $ins->bind_param('isiiss', $paper_id, $action_val, $dept_id, $s['uid'], $person, $note);
     $ins->execute();
+    if ($s['role'] === 'admin') {
+        logAdminActivity($db, $s, 'Undo Paper Status', 'paper', $paper_id, "Reverted DONE to {$action_val}");
+    }
     ok(['message' => "Status reverted to $action_val"]);
 }
 

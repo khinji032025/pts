@@ -15,6 +15,8 @@ export const authAPI = {
   changePassword: (d) => api.post('/auth.php?action=change_password', d),
   qrLogin:        (d) => api.post('/auth.php?action=qr_login', d),
   loginHistory:   ()  => api.get('/auth.php?action=login_history'),
+  adminActivityHistory: () => api.get('/auth.php?action=admin_activity_history'),
+  logAdminActivity: (d) => api.post('/auth.php?action=admin_activity_log', d),
 };
 
 export const deptAPI = {

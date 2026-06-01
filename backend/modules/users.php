@@ -57,7 +57,8 @@ elseif ($action === 'create') {
     $st = $db->prepare("INSERT INTO users (username,password,role,department_id,marker_role) VALUES (?,?,?,?,?)");
     $st->bind_param('sssis', $username, $hash, $role, $dept_id, $marker_role);
     if (!$st->execute()) err('Username already taken.');
-    ok(['id' => $db->insert_id]);
+    $userId = $db->insert_id;
+    ok(['id' => $userId]);
 }
 
 elseif ($action === 'update') {
@@ -96,6 +97,7 @@ elseif ($action === 'update') {
         $p->bind_param('si', $hash, $id);
         $p->execute();
     }
+
     ok();
 }
 

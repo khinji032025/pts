@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { paperAPI, deptAPI } from '../../utils/api';
+import { paperAPI, deptAPI, authAPI } from '../../utils/api';
 import PapersTable from '../../components/PapersTable';
 import usePaperNotifications from '../../hooks/usePaperNotifications';
 
@@ -22,6 +22,17 @@ export default function AdminPapers() {
     e.preventDefault(); setError(''); setOk('');
     try {
       const r = await paperAPI.create({ title:form.title, dept_id:form.dept_id });
+      const paperId = r.data.id;
+      try {
+        await authAPI.logAdminActivity({
+          action: 'Create Paper',
+          target_type: 'paper',
+          target_id: paperId,
+          details: `Created paper #${r.data.ref_code}`,
+        });
+      } catch (logErr) {
+        console.error('Admin activity log failed', logErr);
+      }
       setOk(`Created! Ref #${r.data.ref_code}`);
       setForm(f=>({...f,title:''}));
       setRefresh(n=>n+1);

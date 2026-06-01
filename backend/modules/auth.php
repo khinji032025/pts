@@ -38,6 +38,33 @@ function logDepartmentLogin($db, $row, $method) {
     $st->execute();
 }
 
+function ensureAdminActivityLogsTable($db) {
+    $db->query("CREATE TABLE IF NOT EXISTS admin_activity_logs (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        username VARCHAR(50) NOT NULL,
+        action VARCHAR(100) NOT NULL,
+        target_type VARCHAR(50) DEFAULT NULL,
+        target_id INT DEFAULT NULL,
+        details VARCHAR(255) DEFAULT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )");
+}
+
+function logAdminActivity($db, $s, $action, $target_type = null, $target_id = null, $details = null) {
+    if (($s['role'] ?? '') !== 'admin') return;
+    ensureAdminActivityLogsTable($db);
+    $st = $db->prepare("INSERT INTO admin_activity_logs (user_id, username, action, target_type, target_id, details) VALUES (?, ?, ?, ?, ?, ?)");
+    $uid = intval($s['uid']);
+    $username = (string)($s['username'] ?? '');
+    $targetType = $target_type ? (string)$target_type : null;
+    $targetId = $target_id ? intval($target_id) : null;
+    $detailText = $details ? (string)$details : null;
+    $st->bind_param('isssis', $uid, $username, $action, $targetType, $targetId, $detailText);
+    $st->execute();
+}
+
 $action = $_GET['action'] ?? '';
 
 if ($action === 'login') {
@@ -136,6 +163,33 @@ elseif ($action === 'login_history') {
     $logs = [];
     while ($row = $r->fetch_assoc()) $logs[] = $row;
     ok(['logs' => $logs]);
+}
+
+elseif ($action === 'admin_activity_history') {
+    requireAdmin();
+    $db = getDB();
+    ensureAdminActivityLogsTable($db);
+    $r = $db->query("SELECT id, user_id, username, action, target_type, target_id, details, created_at
+                     FROM admin_activity_logs
+                     ORDER BY created_at DESC, id DESC
+                     LIMIT 200");
+    $logs = [];
+    while ($row = $r->fetch_assoc()) $logs[] = $row;
+    ok(['logs' => $logs]);
+}
+
+elseif ($action === 'admin_activity_log') {
+    $s = requireAdmin();
+    $b = body();
+    $actionText = trim($b['action'] ?? '');
+    if (!$actionText) err('Action text required.');
+    $targetType = trim($b['target_type'] ?? '') ?: null;
+    $targetId = isset($b['target_id']) ? intval($b['target_id']) : null;
+    $details = trim($b['details'] ?? '') ?: null;
+
+    $db = getDB();
+    logAdminActivity($db, $s, $actionText, $targetType, $targetId, $details);
+    ok(['message' => 'Admin activity logged']);
 }
 
 else err('Invalid action.', 404);

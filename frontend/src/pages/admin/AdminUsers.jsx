@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { userAPI, deptAPI } from '../../utils/api';
+import { userAPI, deptAPI, authAPI } from '../../utils/api';
 import { useAuth } from '../../context/AuthContext';
 
 export default function AdminUsers() {
@@ -31,20 +31,67 @@ export default function AdminUsers() {
 
   const create = async (e) => {
     e.preventDefault(); setError(''); setOk('');
-    try { await userAPI.create(form); setForm({username:'',password:'',role:'department',dept_id:'',marker_role:null}); setOk('User created.'); load(); }
-    catch (err) { setError(err.response?.data?.error || 'Failed.'); }
+    try {
+      const r = await userAPI.create(form);
+      const newId = r.data.id;
+      if (me?.role === 'admin') {
+        try {
+          await authAPI.logAdminActivity({
+            action: 'Create User',
+            target_type: 'user',
+            target_id: newId,
+            details: `Created user ${form.username} (${form.role})`,
+          });
+        } catch (logErr) {
+          console.error('Admin activity log failed', logErr);
+        }
+      }
+      setForm({username:'',password:'',role:'department',dept_id:'',marker_role:null});
+      setOk('User created.');
+      load();
+    } catch (err) { setError(err.response?.data?.error || 'Failed.'); }
   };
 
   const update = async (e) => {
     e.preventDefault(); setError(''); setOk('');
-    try { await userAPI.update(editing.id, editing); setEditing(null); setOk('User updated.'); load(); }
-    catch (err) { setError(err.response?.data?.error || 'Failed.'); }
+    try {
+      await userAPI.update(editing.id, editing);
+      if (me?.role === 'admin') {
+        try {
+          await authAPI.logAdminActivity({
+            action: 'Update User',
+            target_type: 'user',
+            target_id: editing.id,
+            details: `Updated user ${editing.username} (${editing.role})`,
+          });
+        } catch (logErr) {
+          console.error('Admin activity log failed', logErr);
+        }
+      }
+      setEditing(null);
+      setOk('User updated.');
+      load();
+    } catch (err) { setError(err.response?.data?.error || 'Failed.'); }
   };
 
   const del = async (u) => {
     if (!window.confirm(`Delete "${u.username}"?`)) return;
-    try { await userAPI.delete(u.id); load(); }
-    catch (err) { alert(err.response?.data?.error||'Failed.'); }
+    try {
+      await userAPI.delete(u.id);
+      if (me?.role === 'admin') {
+        try {
+          await authAPI.logAdminActivity({
+            action: 'Delete User',
+            target_type: 'user',
+            target_id: u.id,
+            details: `Deleted user ${u.username}`,
+          });
+        } catch (logErr) {
+          console.error('Admin activity log failed', logErr);
+        }
+      }
+      load();
+    } catch (err) { alert(err.response?.data?.error||'Failed.'); }
   };
 
   const F = editing ? editing : form;
