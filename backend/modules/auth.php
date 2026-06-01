@@ -54,15 +54,16 @@ if ($action === 'login') {
 
     if (!$row || !password_verify($p, $row['password'])) err('Invalid username or password.', 401);
 
-    $_SESSION['uid']      = $row['id'];
-    $_SESSION['username'] = $row['username'];
-    $_SESSION['role']     = $row['role'];
-    $_SESSION['dept_id']  = $row['department_id'];
-    $_SESSION['dept_name']= $row['dept_name'];
+    $_SESSION['uid']         = $row['id'];
+    $_SESSION['username']    = $row['username'];
+    $_SESSION['role']        = $row['role'];
+    $_SESSION['dept_id']     = $row['department_id'];
+    $_SESSION['dept_name']   = $row['dept_name'];
+    $_SESSION['marker_role'] = $row['marker_role'];
 
     logDepartmentLogin($db, $row, 'password');
 
-    ok(['user' => ['id'=>$row['id'],'username'=>$row['username'],'role'=>$row['role'],'dept_id'=>$row['department_id'],'dept_name'=>$row['dept_name']]]);
+    ok(['user' => ['id'=>$row['id'],'username'=>$row['username'],'role'=>$row['role'],'dept_id'=>$row['department_id'],'dept_name'=>$row['dept_name'],'marker_role'=>$row['marker_role']]]);
 }
 
 elseif ($action === 'logout') {
@@ -72,7 +73,7 @@ elseif ($action === 'logout') {
 
 elseif ($action === 'session') {
     if (empty($_SESSION['uid'])) ok(['auth' => false]);
-    ok(['auth' => true, 'user' => ['id'=>$_SESSION['uid'],'username'=>$_SESSION['username'],'role'=>$_SESSION['role'],'dept_id'=>$_SESSION['dept_id'],'dept_name'=>$_SESSION['dept_name']]]);
+    ok(['auth' => true, 'user' => ['id'=>$_SESSION['uid'],'username'=>$_SESSION['username'],'role'=>$_SESSION['role'],'dept_id'=>$_SESSION['dept_id'],'dept_name'=>$_SESSION['dept_name'],'marker_role'=>$_SESSION['marker_role']]]);
 }
 
 elseif ($action === 'change_password') {
@@ -111,15 +112,16 @@ elseif ($action === 'qr_login') {
     if (!$row) err('Department user not found.', 404);
 
     // Log in as that department user
-    $_SESSION['uid']      = $row['id'];
-    $_SESSION['username'] = $row['username'];
-    $_SESSION['role']     = $row['role'];
-    $_SESSION['dept_id']  = $row['department_id'];
-    $_SESSION['dept_name']= $row['dept_name'];
+    $_SESSION['uid']         = $row['id'];
+    $_SESSION['username']    = $row['username'];
+    $_SESSION['role']        = $row['role'];
+    $_SESSION['dept_id']     = $row['department_id'];
+    $_SESSION['dept_name']   = $row['dept_name'];
+    $_SESSION['marker_role'] = $row['marker_role'];
 
     logDepartmentLogin($db, $row, 'qr');
 
-    ok(['user' => ['id'=>$row['id'],'username'=>$row['username'],'role'=>$row['role'],'dept_id'=>$row['department_id'],'dept_name'=>$row['dept_name']]]);
+    ok(['user' => ['id'=>$row['id'],'username'=>$row['username'],'role'=>$row['role'],'dept_id'=>$row['department_id'],'dept_name'=>$row['dept_name'],'marker_role'=>$row['marker_role']]]);
 }
 
 elseif ($action === 'login_history') {

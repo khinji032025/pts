@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { paperAPI } from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import StatusBadge from '../components/StatusBadge';
+import MarkerRoleWarningModal from '../components/MarkerRoleWarningModal';
 
 export default function ScanRedirect() {
   const { id: scannedRef } = useParams();
@@ -12,6 +13,8 @@ export default function ScanRedirect() {
   const [loading, setLoading] = useState(true);
   const [done, setDone]     = useState('');
   const [error, setError]   = useState('');
+  const [markerRoleWarning, setMarkerRoleWarning] = useState(null);
+  const scanRunningRef = useRef(false);
 
   const warningCard = (title, message) => (
     <div style={styles.bg}>
@@ -33,6 +36,8 @@ export default function ScanRedirect() {
     if (!user) { nav(`/login?next=/scan/${scannedRef}`); return; }
 
     const runScan = async () => {
+      setError('');
+      setMarkerRoleWarning(null);
       try {
         // Guard against duplicate effect execution (e.g., React StrictMode in development)
         const lockKey = `scan-lock-${scannedRef}-${user?.uid || user?.username || 'user'}`;
@@ -89,8 +94,14 @@ export default function ScanRedirect() {
           }
         }
 
+        if (scanRunningRef.current) {
+          return;
+        }
+        scanRunningRef.current = true;
+
         if (now - last <= 2500) {
-          // Duplicate effect detected (e.g., StrictMode). Skip duplicate request.
+          // Duplicate effect detected (e.g., React StrictMode). Skip duplicate request.
+          scanRunningRef.current = false;
           return;
         }
 
@@ -101,8 +112,34 @@ export default function ScanRedirect() {
         setPaper(scannedPaper);
         setDone(scannedPaper?.status_action || 'IN');
       } catch (err) {
-        setError(err.response?.data?.error || 'Paper not found.');
+        const errorMsg = err.response?.data?.error || 'Paper not found.';
+        
+        // Check for marker role restriction error
+        if (errorMsg.includes('You are assigned to mark papers as')) {
+          const match = errorMsg.match(/You are assigned to mark papers as '(\w+)', but scanning this paper would mark it as '(\w+)'/);
+          if (match && match[1] && match[2]) {
+            setPaper(null);
+            setMarkerRoleWarning({ markerRole: match[1], attemptedAction: match[2] });
+            setLoading(false);
+            return;
+          }
+        }
+
+        // Check for missing role warning
+        if (errorMsg.includes('not assigned a marker role')) {
+          setPaper(null);
+          setMarkerRoleWarning({ markerRole: 'UNASSIGNED', attemptedAction: 'SCAN' });
+          setLoading(false);
+          return;
+        }
+        
+        if (errorMsg === 'Forbidden.' && user?.marker_role) {
+          setError('You do not have permission to mark this paper with that action. Please ensure your marker role is set correctly, or log out and log back in.');
+        } else {
+          setError(errorMsg);
+        }
       } finally {
+        scanRunningRef.current = false;
         setLoading(false);
       }
     };
@@ -110,7 +147,18 @@ export default function ScanRedirect() {
     runScan();
   }, [scannedRef, user, authLoading, nav]);
 
-  if (authLoading || loading || !paper) return (
+  if (markerRoleWarning) return (
+    <MarkerRoleWarningModal
+      markerRole={markerRoleWarning.markerRole}
+      attemptedAction={markerRoleWarning.attemptedAction}
+      onClose={() => {
+        setMarkerRoleWarning(null);
+        nav(user?.role === 'admin' ? '/admin' : '/dept');
+      }}
+    />
+  );
+
+  if (authLoading || loading) return (
     <div style={styles.bg}>
       <div style={styles.card}>
         <div style={{ textAlign: 'center', padding: 40 }}>
@@ -133,7 +181,19 @@ export default function ScanRedirect() {
     </div>
   );
 
+  if (!paper) return (
+    <div style={styles.bg}>
+      <div style={styles.card}>
+        <div style={{ textAlign: 'center', padding: 40 }}>
+          <div style={{ fontSize: 16, color: '#555' }}>Unable to load paper details.</div>
+          <button style={{ ...styles.btnOutline, marginTop: 20 }} onClick={() => nav('/dept')}>Go to Dashboard</button>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
+    <>
     <div style={styles.bg}>
       <div style={styles.card}>
 
@@ -198,6 +258,7 @@ export default function ScanRedirect() {
 
       </div>
     </div>
+    </>
   );
 }
 

@@ -7,7 +7,7 @@ export default function AdminUsers() {
   const [users, setUsers]   = useState([]);
   const [depts, setDepts]   = useState([]);
   const [loading, setLoading] = useState(true);
-  const [form, setForm]     = useState({ username:'', password:'', role:'department', dept_id:'' });
+  const [form, setForm]     = useState({ username:'', password:'', role:'department', dept_id:'', marker_role:null });
   const [editing, setEditing] = useState(null);
   const [error, setError]   = useState('');
   const [ok, setOk]         = useState('');
@@ -16,15 +16,22 @@ export default function AdminUsers() {
     setLoading(true);
     try {
       const [u,d] = await Promise.all([userAPI.list(), deptAPI.list()]);
-      setUsers(u.data.users); setDepts(d.data.departments);
-    } catch {} finally { setLoading(false); }
+      setUsers(u?.data?.users || []);
+      setDepts(d?.data?.departments || []);
+    } catch (err) {
+      console.error('Failed to load users/depts:', err);
+      setUsers([]);
+      setDepts([]);
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   useEffect(() => { load(); }, []);
 
   const create = async (e) => {
     e.preventDefault(); setError(''); setOk('');
-    try { await userAPI.create(form); setForm({username:'',password:'',role:'department',dept_id:''}); setOk('User created.'); load(); }
+    try { await userAPI.create(form); setForm({username:'',password:'',role:'department',dept_id:'',marker_role:null}); setOk('User created.'); load(); }
     catch (err) { setError(err.response?.data?.error || 'Failed.'); }
   };
 
@@ -64,11 +71,19 @@ export default function AdminUsers() {
                 <option value="admin">Admin</option>
               </select></div>
             {F.role==='department' && (
-              <div className="fg"><label className="lbl">Department</label>
-                <select className="sel" value={F.dept_id||''} onChange={e=>setF(f=>({...f,dept_id:e.target.value}))}>
-                  <option value="">-- None --</option>
-                  {depts.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
-                </select></div>
+              <>
+                <div className="fg"><label className="lbl">Department</label>
+                  <select className="sel" value={F.dept_id||''} onChange={e=>setF(f=>({...f,dept_id:e.target.value}))}>
+                    <option value="">-- None --</option>
+                    {depts.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
+                  </select></div>
+                <div className="fg"><label className="lbl">Marker Role</label>
+                  <select className="sel" value={F.marker_role||''} onChange={e=>setF(f=>({...f,marker_role:e.target.value||null}))}>
+                    <option value="">-- None --</option>
+                    <option value="IN">IN (Entry Marker)</option>
+                    <option value="OUT">OUT (Exit Marker)</option>
+                  </select></div>
+              </>
             )}
             <button type="submit" className="btn btn-navy btn-full">{editing ? 'Save Changes' : 'Create User'}</button>
           </form>
@@ -78,19 +93,20 @@ export default function AdminUsers() {
       <div className="card">
         <div className="card-head">
           <span className="card-title">All Users</span>
-          <span className="badge b-none">{users.length}</span>
+          <span className="badge b-none">{users && users.length ? users.length : 0}</span>
         </div>
         <div className="tbl-wrap">
           {loading ? <div style={{padding:32,textAlign:'center'}}><div className="spinner" style={{margin:'0 auto'}} /></div> : (
             <table>
-              <thead><tr><th>#</th><th>Username</th><th>Role</th><th>Department</th><th style={{textAlign:'right'}}>Actions</th></tr></thead>
+              <thead><tr><th>#</th><th>Username</th><th>Role</th><th>Department</th><th>Marker Role</th><th style={{textAlign:'right'}}>Actions</th></tr></thead>
               <tbody>
-                {users.map(u=>(
+                {users && users.length > 0 ? users.map(u=>(
                   <tr key={u.id}>
                     <td className="muted sm">{u.id}</td>
                     <td style={{fontWeight:500}}>{u.username}</td>
                     <td><span className={`badge ${u.role==='admin'?'b-admin':'b-dept'}`}>{u.role}</span></td>
                     <td className="muted">{u.dept_name||'—'}</td>
+                    <td>{u.marker_role ? <span style={{background:'var(--blue-bg)',color:'var(--blue)',padding:'2px 8px',borderRadius:'4px',fontSize:'11px',fontWeight:'600'}}>{u.marker_role}</span> : <span className="muted">—</span>}</td>
                     <td style={{textAlign:'right'}}>
                       <div className="row" style={{justifyContent:'flex-end',gap:4}}>
                         <button className="btn btn-outline btn-sm" onClick={() => { setEditing({...u,password:''}); setError(''); setOk(''); }}>Edit</button>
@@ -98,7 +114,9 @@ export default function AdminUsers() {
                       </div>
                     </td>
                   </tr>
-                ))}
+                )) : (
+                  <tr><td colSpan="6" style={{textAlign:'center', padding:'20px', color:'var(--t3)'}}>No users found.</td></tr>
+                )}
               </tbody>
             </table>
           )}

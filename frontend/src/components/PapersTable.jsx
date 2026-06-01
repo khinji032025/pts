@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import StatusBadge from './StatusBadge';
 import QRCode from './QRCode';
 import Barcode from './Barcode';
+import MarkerRoleWarningModal from './MarkerRoleWarningModal';
 
 const MONTHS = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
@@ -17,11 +18,32 @@ export default function PapersTable({ refresh }) {
   const [active, setActive]   = useState({});
   const [msg, setMsg]         = useState('');
   const [openActionMenuId, setOpenActionMenuId] = useState(null);
+  const [markerRoleWarning, setMarkerRoleWarning] = useState(null);
 
   const isAdmin = user?.role === 'admin';
 
   const canMark = (paper, action) => {
     const status = paper.status_action || null;
+    
+    // Check if user is admin (admins can do any action)
+    if (isAdmin) {
+      if (action === 'IN') return status !== 'IN' && status !== 'DONE';
+      if (action === 'OUT') return status === 'IN';
+      if (action === 'DONE') return !!status && status !== 'DONE';
+      return false;
+    }
+    
+    // For department users, check marker_role restriction
+    if (!isAdmin) {
+      if (!user?.marker_role) {
+        return false;
+      }
+      if ((user.marker_role === 'IN' && action === 'OUT') || (user.marker_role === 'OUT' && action === 'IN')) {
+        return false; // User doesn't have the correct role for this action
+      }
+    }
+    
+    // Normal status-based checks
     if (action === 'IN') return status !== 'IN' && status !== 'DONE';
     if (action === 'OUT') return status === 'IN';
     if (action === 'DONE') return !!status && status !== 'DONE';
@@ -80,10 +102,35 @@ export default function PapersTable({ refresh }) {
       setMsg(`Marked ${action} — Ref #${paper.ref_code}`);
       load(active);
       setTimeout(() => setMsg(''), 3000);
-    } catch (err) { setMsg('Error: ' + (err.response?.data?.error || 'Failed')); }
+    } catch (err) { 
+      const errorMsg = err.response?.data?.error || 'Failed';
+      console.log('Mark error:', errorMsg);
+      
+      // Check for marker role restriction
+      if (errorMsg.includes('You are assigned to mark papers as')) {
+        const match = errorMsg.match(/You are assigned to mark papers as '(\w+)', but you are trying to mark as '(\w+)'/);
+        console.log('Regex match:', match);
+        if (match && match[1] && match[2]) {
+          setMarkerRoleWarning({ markerRole: match[1], attemptedAction: match[2] });
+          return;
+        }
+      }
+      setMsg('Error: ' + errorMsg); 
+      setTimeout(() => setMsg(''), 3500);
+    }
   };
 
   const attemptMark = async (paper, action) => {
+    if (!isAdmin && !user?.marker_role) {
+      setMarkerRoleWarning({ markerRole: 'UNASSIGNED', attemptedAction: action });
+      return;
+    }
+
+    if (!isAdmin && ((user.marker_role === 'IN' && action === 'OUT') || (user.marker_role === 'OUT' && action === 'IN'))) {
+      setMarkerRoleWarning({ markerRole: user.marker_role, attemptedAction: action });
+      return;
+    }
+    
     if (!canMark(paper, action)) {
       setMsg(`⚠️ ${warningFor(paper, action)}`);
       setTimeout(() => setMsg(''), 3500);
@@ -384,6 +431,13 @@ export default function PapersTable({ refresh }) {
           </table>
         )}
       </div>
+      {markerRoleWarning && (
+        <MarkerRoleWarningModal
+          markerRole={markerRoleWarning.markerRole}
+          attemptedAction={markerRoleWarning.attemptedAction}
+          onClose={() => setMarkerRoleWarning(null)}
+        />
+      )}
     </div>
   );
 }

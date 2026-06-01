@@ -220,6 +220,24 @@ elseif ($action === 'mark') {
         }
     }
 
+    // Check marker role restriction (only for non-admin department users)
+    if (!$isAdmin && $s['role'] === 'department') {
+        $userRow = $db->prepare("SELECT marker_role FROM users WHERE id=?");
+        $userRow->bind_param('i', $s['uid']);
+        $userRow->execute();
+        $userMarkerRole = $userRow->get_result()->fetch_assoc();
+        $userRow->close();
+        
+        if (empty($userMarkerRole['marker_role'])) {
+            err('You are not assigned a marker role. Please contact your administrator.', 403);
+        }
+
+        $markerRole = $userMarkerRole['marker_role'];
+        if (($markerRole === 'IN' && $act === 'OUT') || ($markerRole === 'OUT' && $act === 'IN')) {
+            err("You are assigned to mark papers as '{$markerRole}', but you are trying to mark as '{$act}'", 403);
+        }
+    }
+
     if ($act === 'IN') {
         if ($currentAction === 'IN') err('Duplicate IN. This paper is already marked IN.');
         if ($currentAction === 'DONE') err('This paper is already marked DONE.');
@@ -371,7 +389,26 @@ elseif ($action === 'scan') {
             }
         }
 
-        $nextAction = ($currentAction === 'IN') ? 'OUT' : 'IN';
+        $nextAction = $currentAction === 'IN' ? 'OUT' : 'IN';
+
+        // Check marker role restriction for non-admin department users (for auto-scan)
+        if (!$isAdmin && $s['role'] === 'department') {
+            $userRow = $db->prepare("SELECT marker_role FROM users WHERE id=?");
+            $userRow->bind_param('i', $s['uid']);
+            $userRow->execute();
+            $userMarkerRole = $userRow->get_result()->fetch_assoc();
+            $userRow->close();
+            
+            if (empty($userMarkerRole['marker_role'])) {
+                err('You are not assigned a marker role. Please contact your administrator.', 403);
+            }
+
+            $markerRole = $userMarkerRole['marker_role'];
+            if (($markerRole === 'IN' && $nextAction === 'OUT') || ($markerRole === 'OUT' && $nextAction === 'IN')) {
+                err("You are assigned to mark papers as '{$markerRole}', but scanning this paper would mark it as '{$nextAction}'", 403);
+            }
+        }
+        
         $dept_id = intval($s['dept_id'] ?? 0);
         if (!$dept_id) {
             $dept_id = intval($paper['origin_department_id'] ?? 0);
@@ -380,14 +417,18 @@ elseif ($action === 'scan') {
         $person = $s['username'];
         $note = 'qr-auto-scan';
 
-        // Atomic dedupe: block duplicate auto-scan insert from same user within 3 seconds.
-        $ins = $db->prepare("INSERT INTO status_logs (paper_id,action,department_id,user_id,person,note) SELECT ?,?,?,?,?,? FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM status_logs WHERE paper_id=? AND user_id=? AND note='qr-auto-scan' AND TIMESTAMPDIFF(SECOND, created_at, NOW()) <= 3)");
-        $uid = intval($s['uid']);
-        $paperId = intval($paper['id']);
-        $ins->bind_param('isiissii', $paperId, $nextAction, $dept_id, $uid, $person, $note, $paperId, $uid);
-        $ins->execute();
-        $didAutoMark = $ins->affected_rows > 0;
-        $ins->close();
+        if ($nextAction) {
+            // Atomic dedupe: block duplicate auto-scan insert from same user within 3 seconds.
+            $ins = $db->prepare("INSERT INTO status_logs (paper_id,action,department_id,user_id,person,note) SELECT ?,?,?,?,?,? FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM status_logs WHERE paper_id=? AND user_id=? AND note='qr-auto-scan' AND TIMESTAMPDIFF(SECOND, created_at, NOW()) <= 3)");
+            $uid = intval($s['uid']);
+            $paperId = intval($paper['id']);
+            $ins->bind_param('isiissii', $paperId, $nextAction, $dept_id, $uid, $person, $note, $paperId, $uid);
+            $ins->execute();
+            $didAutoMark = $ins->affected_rows > 0;
+            $ins->close();
+        } else {
+            $didAutoMark = false;
+        }
     }
 
     $s = currentStatus($db, $paper['id']);
