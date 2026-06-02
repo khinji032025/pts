@@ -303,7 +303,10 @@ export default function PaperView() {
                         <button type="button" className="btn btn-outline btn-sm" onClick={() => viewImage(img)}>View</button>
                         <button type="button" className="btn btn-red btn-sm" onClick={() => deleteImage(img)}>✕</button>
                       </div>
-                      <div style={{ fontSize: 11, color: 'var(--t3)' }}>{new Date(img.uploaded_at).toLocaleDateString('en-PH')}</div>
+                      <div style={{ fontSize: 11, color: 'var(--t3)' }}>
+                        <div>{new Date(img.uploaded_at).toLocaleDateString('en-PH')} {new Date(img.uploaded_at).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })}</div>
+                        <div style={{ marginTop: 3 }}>By: <strong>{img.username || '—'}</strong></div>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -378,6 +381,41 @@ export default function PaperView() {
             </table>
           </div>
         </div>
+
+        {/* Attachments History */}
+        {paper.images?.length > 0 && (
+          <div className="card full-span">
+            <div className="card-head">
+              <span className="card-title">📎 Attachments History</span>
+              <span className="badge b-none">{paper.images?.length || 0} files</span>
+            </div>
+            <div className="tbl-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Upload Time</th>
+                    <th>Uploaded By</th>
+                    <th>File</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paper.images.map(img => (
+                    <tr key={img.id}>
+                      <td className="sm muted" style={{ whiteSpace: 'nowrap' }}>
+                        <div>{new Date(img.uploaded_at).toLocaleDateString('en-PH')}</div>
+                        <div style={{ fontSize: '11px' }}>{new Date(img.uploaded_at).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
+                      </td>
+                      <td className="sm" style={{ fontWeight: 500 }}>{img.username || '—'}</td>
+                      <td className="sm">
+                        <button className="btn btn-outline btn-sm" onClick={() => viewImage(img)}>View File</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         {previewImage && (
           <div className="overlay" onClick={e => e.target === e.currentTarget && setPreviewImage(null)}>

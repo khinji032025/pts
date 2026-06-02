@@ -99,7 +99,7 @@ elseif ($action === 'public_view') {
     $st3->close();
     $paper['logs'] = $logs;
 
-    $st4 = $db->prepare("SELECT * FROM paper_images WHERE paper_id=? ORDER BY uploaded_at DESC");
+    $st4 = $db->prepare("SELECT pi.id, pi.paper_id, pi.image_path, pi.uploaded_by, pi.uploaded_at, u.username FROM paper_images pi LEFT JOIN users u ON u.id=pi.uploaded_by WHERE pi.paper_id=? ORDER BY pi.uploaded_at DESC");
     $st4->bind_param('i', $paper['id']);
     $st4->execute();
     $res4 = $st4->get_result();
@@ -147,7 +147,7 @@ elseif ($action === 'view') {
     $paper['logs'] = $logs;
 
     // images
-    $st4 = $db->prepare("SELECT * FROM paper_images WHERE paper_id=? ORDER BY uploaded_at DESC");
+    $st4 = $db->prepare("SELECT pi.id, pi.paper_id, pi.image_path, pi.uploaded_by, pi.uploaded_at, u.username FROM paper_images pi LEFT JOIN users u ON u.id=pi.uploaded_by WHERE pi.paper_id=? ORDER BY pi.uploaded_at DESC");
     $st4->bind_param('i', $id);
     $st4->execute();
     $res4 = $st4->get_result();
@@ -714,7 +714,7 @@ elseif ($action === 'scan') {
     $st2->close();
     $paper['logs'] = $logs;
 
-    $st3 = $db->prepare("SELECT * FROM paper_images WHERE paper_id=? ORDER BY uploaded_at DESC");
+    $st3 = $db->prepare("SELECT pi.id, pi.paper_id, pi.image_path, pi.uploaded_by, pi.uploaded_at, u.username FROM paper_images pi LEFT JOIN users u ON u.id=pi.uploaded_by WHERE pi.paper_id=? ORDER BY pi.uploaded_at DESC");
     $st3->bind_param('i', $paper['id']);
     $st3->execute();
     $res3 = $st3->get_result();

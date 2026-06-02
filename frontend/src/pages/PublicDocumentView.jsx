@@ -129,8 +129,43 @@ export default function PublicDocumentView() {
               </table>
             </div>
           </div>
-        </div>
+        
+
+          <div className="card full-span">
+            <div className="card-head"><span className="card-title">📎 Attachment History</span></div>
+            <div className="tbl-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Uploaded</th>
+                    <th>Uploader</th>
+                    <th>Preview</th>
+                    <th>Note</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paper.images?.length > 0 ? paper.images.map(img => (
+                    <tr key={img.id}>
+                      <td style={{ whiteSpace: 'nowrap' }}>{formatDateTime(img.uploaded_at)}</td>
+                      <td>{img.username || 'System'}</td>
+                      <td>
+                        <button type="button" onClick={() => setPreviewImage(img)} className="btn btn-outline btn-sm" style={{ padding: '6px 10px' }}>
+                          View
+                        </button>
+                      </td>
+                      <td>{img.note || 'Attached image'}</td>
+                    </tr>
+                  )) : (
+                    <tr><td colSpan={4} style={{ textAlign: 'center', padding: 24, color: 'var(--t3)' }}>No attachment history yet.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+</div>
       )}
+
+          
 
         {previewImage && (
           <div className="overlay" onClick={e => e.target === e.currentTarget && setPreviewImage(null)}>
