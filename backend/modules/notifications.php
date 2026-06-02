@@ -19,15 +19,20 @@ $db->query("CREATE TABLE IF NOT EXISTS user_notifications (
   user_id INT NOT NULL,
   paper_id INT NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  read_at TIMESTAMP NULL,
-  UNIQUE KEY uq_user_paper (user_id, paper_id)
+  read_at TIMESTAMP NULL
 )");
+$idx = $db->query("SHOW INDEX FROM user_notifications WHERE Key_name='uq_user_paper'");
+if ($idx && $idx->num_rows > 0) {
+    $db->query("ALTER TABLE user_notifications DROP INDEX uq_user_paper");
+}
 
 if ($action === 'list') {
     // return recent notification events for papers relevant to the user
     if ($s['role'] !== 'department') {
         err('Only department users can access notifications.', 403);
     }
+
+    // NOTE: do not collapse notifications here; each paper action should create a fresh notification entry
 
     // Query each notification entry separately (one per action) with latest action info
     // For each notification entry, compute the paper's action and department as of the notification time

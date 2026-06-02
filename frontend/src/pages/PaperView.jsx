@@ -34,6 +34,7 @@ export default function PaperView() {
   const isOriginDept = !!(user?.dept_name && paper?.origin && user.dept_name === paper.origin);
   const hasUserMarkedPaper = !!paper?.logs?.some(log => String(log.user_id) === String(user?.id) && ['IN', 'OUT'].includes(log.action));
   const canCapture = isAdmin || isOriginDept || currentStatus === null || hasUserMarkedPaper;
+  const canDeleteImage = isAdmin || isOriginDept || hasUserMarkedPaper;
   const isCurrentDept = !!(user?.dept_name && currentStatusDept && user.dept_name === currentStatusDept);
   const formatDateTime = (value) => value ? new Date(value).toLocaleString('en-PH') : '—';
 
@@ -242,9 +243,7 @@ export default function PaperView() {
                         style={{ opacity: canMarkDone ? 1 : 0.45, cursor: canMarkDone ? 'pointer' : 'not-allowed' }}
                       >✓ Mark Done</button>
                     </div>
-                  ) : (
-                    <p className="sm muted">Only the origin department can start a paper. After the origin marks OUT, the next department may scan it, and only the current holder may mark OUT or Done.</p>
-                  )}
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -269,8 +268,13 @@ export default function PaperView() {
 
         {/* Document image */}
         <div className="card mb6">
-          <div className="card-head">
+          <div className="card-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span className="card-title">🖼️ Document Image</span>
+            {canCapture && (
+              <button className="btn btn-gold btn-sm" onClick={() => nav(`/paper/${id}/capture`)}>
+                📷 Upload Image
+              </button>
+            )}
           </div>
           <div className="card-body">
             {paper.images?.length > 0 ? (
@@ -281,7 +285,9 @@ export default function PaperView() {
                     <div style={{ padding: '8px 10px 10px' }}>
                       <div className="row" style={{ justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
                         <button type="button" className="btn btn-outline btn-sm" onClick={() => viewImage(img)}>View</button>
-                        <button type="button" className="btn btn-red btn-sm" onClick={() => deleteImage(img)}>✕</button>
+                        {canDeleteImage && (
+                          <button type="button" className="btn btn-red btn-sm" onClick={() => deleteImage(img)}>✕</button>
+                        )}
                       </div>
                       <div style={{ fontSize: 11, color: 'var(--t3)' }}>
                         <div>{new Date(img.uploaded_at).toLocaleDateString('en-PH')} {new Date(img.uploaded_at).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })}</div>
@@ -298,7 +304,7 @@ export default function PaperView() {
                 {canCapture ? (
                   <button className="btn btn-gold btn-sm" style={{ marginTop: 12 }} onClick={() => nav(`/paper/${id}/capture`)}>📷 Capture Document Image</button>
                 ) : (
-                  <div style={{ marginTop: 12, maxWidth: 300 }}>
+                  <div style={{ margin: '12px auto 0', maxWidth: 300, textAlign: 'center' }}>
                     Capture is only available to the paper origin department or an administrator, or if your account previously marked this paper IN/OUT.
                   </div>
                 )}

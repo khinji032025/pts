@@ -5,6 +5,8 @@ require_once __DIR__ . '/../middleware/auth.php';
 
 cors();
 
+$action = $_GET['action'] ?? '';
+
 // Ensure notifications table exists (used to track per-user read state)
 $__tmp_db = getDB();
 $__tmp_db->query("CREATE TABLE IF NOT EXISTS user_notifications (
@@ -12,17 +14,30 @@ $__tmp_db->query("CREATE TABLE IF NOT EXISTS user_notifications (
     user_id INT NOT NULL,
     paper_id INT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    read_at TIMESTAMP NULL,
-    UNIQUE KEY uq_user_paper (user_id, paper_id)
+    read_at TIMESTAMP NULL
 )");
-
-$action = $_GET['action'] ?? '';
+$idx = $__tmp_db->query("SHOW INDEX FROM user_notifications WHERE Key_name='uq_user_paper'");
+if ($idx && $idx->num_rows > 0) {
+    $__tmp_db->query("ALTER TABLE user_notifications DROP INDEX uq_user_paper");
+}
 
 function currentStatus($db, $paper_id) {
     $st = $db->prepare("SELECT l.action, l.department_id, d.name dept, l.created_at last_scanned_at FROM status_logs l JOIN departments d ON d.id=l.department_id WHERE l.paper_id=? ORDER BY l.created_at DESC, l.id DESC LIMIT 1");
     $st->bind_param('i', $paper_id);
     $st->execute();
     return $st->get_result()->fetch_assoc();
+}
+
+function notifyUsers($db, $paper_id, $user_ids) {
+    $user_ids = array_values(array_unique(array_filter($user_ids, 'intval')));
+    if (!$user_ids) return;
+    $ins = $db->prepare("INSERT INTO user_notifications (user_id, paper_id) VALUES (?, ?)");
+    if (!$ins) return;
+    foreach ($user_ids as $uid) {
+        $ins->bind_param('ii', $uid, $paper_id);
+        $ins->execute();
+    }
+    $ins->close();
 }
 
 if ($action === 'list') {
@@ -344,6 +359,7 @@ elseif ($action === 'mark') {
         $actor_uid = intval($s['uid']);
         $actor_dept_id = intval($s['dept_id'] ?? 0);
         // Notify origin department users if actor is from a different department
+        $notifyIds = [];
         if ($actor_dept_id !== $originDept) {
             $getOriginUsers = $db->prepare("SELECT id FROM users WHERE department_id=? AND id<>?");
             if ($getOriginUsers) {
@@ -351,9 +367,7 @@ elseif ($action === 'mark') {
                 $getOriginUsers->execute();
                 $resOrigin = $getOriginUsers->get_result();
                 while ($userRow = $resOrigin->fetch_assoc()) {
-                    $notifUid = intval($userRow['id']);
-                    $insNotif = $db->prepare("INSERT INTO user_notifications (user_id, paper_id) VALUES (?, ?)");
-                    if ($insNotif) { $insNotif->bind_param('ii', $notifUid, $paper_id); $insNotif->execute(); $insNotif->close(); }
+                    $notifyIds[] = intval($userRow['id']);
                 }
                 $getOriginUsers->close();
             }
@@ -365,12 +379,11 @@ elseif ($action === 'mark') {
             $getPrevMarkers->execute();
             $resPrev = $getPrevMarkers->get_result();
             while ($markerRow = $resPrev->fetch_assoc()) {
-                $markerUid = intval($markerRow['user_id']);
-                $insNotif2 = $db->prepare("INSERT INTO user_notifications (user_id, paper_id) VALUES (?, ?)");
-                if ($insNotif2) { $insNotif2->bind_param('ii', $markerUid, $paper_id); $insNotif2->execute(); $insNotif2->close(); }
+                $notifyIds[] = intval($markerRow['user_id']);
             }
             $getPrevMarkers->close();
         }
+        notifyUsers($db, $paper_id, $notifyIds);
     } catch (Exception $e) {
         // ignore notification insert failures
     }
@@ -472,10 +485,9 @@ elseif ($action === 'undo_mark') {
                     $getOriginUsers->bind_param('ii', $origin_dept, $actor_uid);
                     $getOriginUsers->execute();
                     $resOrigin = $getOriginUsers->get_result();
+                    $notifyIds = [];
                     while ($userRow = $resOrigin->fetch_assoc()) {
-                        $notifUid = intval($userRow['id']);
-                        $insNotif = $db->prepare("INSERT INTO user_notifications (user_id, paper_id) VALUES (?, ?)");
-                        if ($insNotif) { $insNotif->bind_param('ii', $notifUid, $paper_id); $insNotif->execute(); $insNotif->close(); }
+                        $notifyIds[] = intval($userRow['id']);
                     }
                     $getOriginUsers->close();
                 }
@@ -487,12 +499,11 @@ elseif ($action === 'undo_mark') {
                 $getPrevMarkers->execute();
                 $resPrev = $getPrevMarkers->get_result();
                 while ($markerRow = $resPrev->fetch_assoc()) {
-                    $markerUid = intval($markerRow['user_id']);
-                    $insNotif2 = $db->prepare("INSERT INTO user_notifications (user_id, paper_id) VALUES (?, ?)");
-                    if ($insNotif2) { $insNotif2->bind_param('ii', $markerUid, $paper_id); $insNotif2->execute(); $insNotif2->close(); }
+                    $notifyIds[] = intval($markerRow['user_id']);
                 }
                 $getPrevMarkers->close();
             }
+            notifyUsers($db, $paper_id, $notifyIds);
         }
     } catch (Exception $e) {}
     if ($s['role'] === 'admin') {
@@ -574,7 +585,7 @@ elseif ($action === 'delete_image') {
     if (!$id) err('Image id required.');
 
     $db = getDB();
-    $st = $db->prepare("SELECT pi.image_path, p.origin_department_id FROM paper_images pi JOIN papers p ON p.id=pi.paper_id WHERE pi.id=?");
+    $st = $db->prepare("SELECT pi.image_path, pi.paper_id, p.origin_department_id FROM paper_images pi JOIN papers p ON p.id=pi.paper_id WHERE pi.id=?");
     $st->bind_param('i', $id);
     $st->execute();
     $img = $st->get_result()->fetch_assoc();
@@ -584,7 +595,24 @@ elseif ($action === 'delete_image') {
 
     if ($s['role'] !== 'admin') {
         $ownDept = intval($s['dept_id'] ?? 0);
-        if (!$ownDept || intval($img['origin_department_id']) !== $ownDept) {
+        $allowed = false;
+
+        if ($ownDept && intval($img['origin_department_id']) === $ownDept) {
+            $allowed = true;
+        }
+
+        if (!$allowed) {
+            $logCheck = $db->prepare("SELECT 1 FROM status_logs WHERE paper_id=? AND user_id=? AND action IN ('IN','OUT') LIMIT 1");
+            $logCheck->bind_param('ii', $img['paper_id'], $s['uid']);
+            $logCheck->execute();
+            $hasMark = $logCheck->get_result()->fetch_assoc();
+            $logCheck->close();
+            if ($hasMark) {
+                $allowed = true;
+            }
+        }
+
+        if (!$allowed) {
             err('Forbidden.', 403);
         }
     }
@@ -689,6 +717,7 @@ elseif ($action === 'scan') {
                     $actor_dept_id = intval($actorDeptId);
                     $origin_dept = intval($originDeptId);
                     // Notify origin dept users if actor is not from origin
+                    $notifyIds = [];
                     if ($actor_dept_id !== $origin_dept) {
                         $getOriginUsers = $db->prepare("SELECT id FROM users WHERE department_id=? AND id<>?");
                         if ($getOriginUsers) {
@@ -696,9 +725,7 @@ elseif ($action === 'scan') {
                             $getOriginUsers->execute();
                             $resOrigin = $getOriginUsers->get_result();
                             while ($userRow = $resOrigin->fetch_assoc()) {
-                                $notifUid = intval($userRow['id']);
-                                $insNotif = $db->prepare("INSERT INTO user_notifications (user_id, paper_id) VALUES (?, ?)");
-                                if ($insNotif) { $insNotif->bind_param('ii', $notifUid, $paperId); $insNotif->execute(); $insNotif->close(); }
+                                $notifyIds[] = intval($userRow['id']);
                             }
                             $getOriginUsers->close();
                         }
@@ -710,12 +737,11 @@ elseif ($action === 'scan') {
                         $getPrevMarkers->execute();
                         $resPrev = $getPrevMarkers->get_result();
                         while ($markerRow = $resPrev->fetch_assoc()) {
-                            $markerUid = intval($markerRow['user_id']);
-                            $insNotif2 = $db->prepare("INSERT INTO user_notifications (user_id, paper_id) VALUES (?, ?)");
-                            if ($insNotif2) { $insNotif2->bind_param('ii', $markerUid, $paperId); $insNotif2->execute(); $insNotif2->close(); }
+                            $notifyIds[] = intval($markerRow['user_id']);
                         }
                         $getPrevMarkers->close();
                     }
+                    notifyUsers($db, $paperId, $notifyIds);
                 } catch (Exception $e) {}
             }
         } else {
