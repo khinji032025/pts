@@ -60,7 +60,7 @@ export default function AdminDashboard() {
           ))}
         </div>
         <button type="button" className="btn btn-outline btn-sm admin-history-btn" onClick={() => setShowLoginHistory(true)}>
-          📜 Log History
+          📜 Users Log History
         </button>
         <button type="button" className="btn btn-outline btn-sm admin-history-btn" onClick={() => setShowAdminActivityHistory(true)}>
           🧾 Admin Activity History
@@ -68,7 +68,7 @@ export default function AdminDashboard() {
       </div>
       <div className="admin-mobile-history">
         <button type="button" className="btn btn-outline btn-sm admin-history-mobile-btn" onClick={() => setShowLoginHistory(true)}>
-          📜 Log History
+          📜 Users Log History
         </button>
         <button type="button" className="btn btn-outline btn-sm admin-history-mobile-btn" onClick={() => setShowAdminActivityHistory(true)}>
           🧾 Admin Activity History

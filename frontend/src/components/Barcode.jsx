@@ -12,5 +12,5 @@ export default function Barcode({ value, width = 1.8, height = 50 }) {
       });
     });
   }, [value, width, height]);
-  return <svg ref={ref} style={{ display:'block', maxWidth:'100%' }} />;
+  return <svg ref={ref} style={{ display:'block', maxWidth:'100%', margin: '0 auto' }} />;
 }

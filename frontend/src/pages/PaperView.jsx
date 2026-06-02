@@ -272,16 +272,16 @@ export default function PaperView() {
           <div className="card">
             <div className="card-head"><span className="card-title">🔳 QR Code & Barcode</span></div>
             <div className="card-body" style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:24 }}>
-  <div style={{ textAlign:'center' }}>
-    <div className="lbl mb2">QR CODE</div>
-    <QRCode value={paper.ref_code} size={180} />
-    <div className="sm muted mt4">Scan to update status</div>
-  </div>
-  <div style={{ textAlign:'center' }}>
-    <div className="lbl mb2">BARCODE</div>
-    <Barcode value={paper.ref_code} width={2} height={60} />
-  </div>
-</div>
+              <div style={{ textAlign:'center' }}>
+                <div className="lbl mb2">QR CODE</div>
+                <QRCode value={paper.ref_code} size={180} />
+                <div className="sm muted mt4">Scan with the in-app scanner; clicking will not change status.</div>
+              </div>
+              <div style={{ textAlign:'center' }}>
+                <div className="lbl mb2">BARCODE</div>
+                <Barcode value={paper.ref_code} width={2} height={60} />
+              </div>
+            </div>
           </div>
         </div>
 

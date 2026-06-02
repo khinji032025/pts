@@ -36,14 +36,18 @@ export default function ScanRedirect() {
     if (!user) { nav(`/login?next=/scan/${scannedRef}`); return; }
 
     const runScan = async () => {
+      // Prevent multiple concurrent scans and duplicate requests.
+      const lockKey = `scan-lock-${scannedRef}-${user?.uid || user?.username || 'user'}`;
+      const now = Date.now();
+      const last = Number(sessionStorage.getItem(lockKey) || 0);
+      if (scanRunningRef.current) return;
+      if (now - last <= 2500) return; // recent scan already performed
+
+      scanRunningRef.current = true;
+      sessionStorage.setItem(lockKey, String(now));
       setError('');
       setMarkerRoleWarning(null);
       try {
-        // Guard against duplicate effect execution (e.g., React StrictMode in development)
-        const lockKey = `scan-lock-${scannedRef}-${user?.uid || user?.username || 'user'}`;
-        const now = Date.now();
-        const last = Number(sessionStorage.getItem(lockKey) || 0);
-
         // Before performing an auto-scan (which may change status), fetch the
         // public details to verify the paper's current holder. Only the
         // department that currently has the paper marked IN should be able to
@@ -63,6 +67,7 @@ export default function ScanRedirect() {
             if (current.status_action === 'DONE') {
               setPaper(current);
               setLoading(false);
+              scanRunningRef.current = false;
               return;
             }
 
@@ -75,23 +80,11 @@ export default function ScanRedirect() {
                 </div>
               );
               setLoading(false);
+              scanRunningRef.current = false;
               return;
             }
           }
         }
-
-        if (scanRunningRef.current) {
-          return;
-        }
-        scanRunningRef.current = true;
-
-        if (now - last <= 2500) {
-          // Duplicate effect detected (e.g., React StrictMode). Skip duplicate request.
-          scanRunningRef.current = false;
-          return;
-        }
-
-        sessionStorage.setItem(lockKey, String(now));
 
         const r = await paperAPI.scan(scannedRef, { auto: 1 });
         const scannedPaper = r.data.paper;
