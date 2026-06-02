@@ -6,8 +6,11 @@ import StatusBadge from './StatusBadge';
 import QRCode from './QRCode';
 import Barcode from './Barcode';
 import MarkerRoleWarningModal from './MarkerRoleWarningModal';
+import DeleteConfirmModal from './DeleteConfirmModal';
 
 const MONTHS = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+
 
 export default function PapersTable({ refresh }) {
   const { user } = useAuth();
@@ -19,6 +22,8 @@ export default function PapersTable({ refresh }) {
   const [msg, setMsg]         = useState('');
   const [openActionMenuId, setOpenActionMenuId] = useState(null);
   const [markerRoleWarning, setMarkerRoleWarning] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   const isAdmin = user?.role === 'admin';
 
@@ -140,10 +145,30 @@ export default function PapersTable({ refresh }) {
   };
 
   const del = async (paper) => {
-    if (!window.confirm(`Delete Ref #${paper.ref_code}?`)) return;
-    await paperAPI.delete(paper.id);
-    load(active);
+    // open custom confirmation modal
+    setDeleteTarget(paper);
   };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await paperAPI.delete(deleteTarget.id);
+      setDeleteTarget(null);
+      load(active);
+      setMsg('Deleted successfully.');
+      setTimeout(() => setMsg(''), 3000);
+    } catch (err) {
+      const errorMsg = err.response?.data?.error || err.message || 'Delete failed.';
+      // show as message and optionally open error modal
+      setMsg('Error: ' + errorMsg);
+      setTimeout(() => setMsg(''), 4500);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const cancelDelete = () => setDeleteTarget(null);
 
   const renderMobileActions = (paper) => {
     const showDeptActions = !isAdmin && (user?.dept_name === paper.origin || (paper.status_action === 'IN' && paper.status_dept === user?.dept_name));
@@ -179,12 +204,12 @@ export default function PapersTable({ refresh }) {
             >
               ✓ Done
             </button>
-            {(isAdmin || user?.dept_name === paper.origin) && (
+            {(isAdmin || user?.dept_id === paper.origin_department_id) && (
               <button type="button" className="paper-actions-item paper-actions-danger" onClick={() => { closeActionMenu(); del(paper); }}>Delete</button>
             )}
           </div>
         )}
-      </div>
+    </div>
     );
   };
 
@@ -414,7 +439,7 @@ export default function PapersTable({ refresh }) {
                                     onClick={() => attemptMark(p,'DONE')}
                                   >✓ Done</button>
                               )}
-                              {!isAdmin && (user?.dept_name === p.origin || (p.status_action === 'IN' && p.status_dept === user?.dept_name)) && <button className="btn btn-red btn-sm" onClick={() => del(p)}>Delete</button>}
+                              {!isAdmin && (user?.dept_id === p.origin_department_id || (p.status_action === 'IN' && p.status_dept === user?.dept_name)) && <button className="btn btn-red btn-sm" onClick={() => del(p)}>Delete</button>}
                             </div>
                           </>
                         )}
@@ -437,6 +462,9 @@ export default function PapersTable({ refresh }) {
           attemptedAction={markerRoleWarning.attemptedAction}
           onClose={() => setMarkerRoleWarning(null)}
         />
+      )}
+      {deleteTarget && (
+        <DeleteConfirmModal open={!!deleteTarget} refCode={deleteTarget.ref_code} onCancel={cancelDelete} onConfirm={confirmDelete} />
       )}
     </div>
   );

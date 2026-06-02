@@ -37,7 +37,7 @@ if ($action === 'list') {
     if ($month)  { $where[] = "MONTH(p.created_at)=?"; $types .= 'i'; $vals[] = intval($month); }
     if ($day)    { $where[] = "DAY(p.created_at)=?";   $types .= 'i'; $vals[] = intval($day); }
 
-    $sql = "SELECT p.id,p.ref_code,p.title,p.created_at,d.name origin FROM papers p JOIN departments d ON d.id=p.origin_department_id" . ($where ? " WHERE ".implode(' AND ',$where) : "") . " ORDER BY p.created_at DESC";
+    $sql = "SELECT p.id,p.ref_code,p.title,p.created_at,p.origin_department_id,d.name origin FROM papers p JOIN departments d ON d.id=p.origin_department_id" . ($where ? " WHERE ".implode(' AND ',$where) : "") . " ORDER BY p.created_at DESC";
     $st = $db->prepare($sql);
     if ($types) $st->bind_param($types, ...$vals);
     $st->execute();
@@ -212,13 +212,35 @@ elseif ($action === 'create') {
 }
 
 elseif ($action === 'delete') {
-    $s = requireAdmin();
+    // Allow admins to delete any paper. Departments can delete if the paper originated from their department.
+    $s = requireLogin();
     $id = intval($_GET['id'] ?? 0);
+    if (!$id) err('Paper ID required.');
     $db = getDB();
+
+    // fetch paper to check origin
+    $ch = $db->prepare("SELECT origin_department_id FROM papers WHERE id=?");
+    $ch->bind_param('i', $id);
+    $ch->execute();
+    $prow = $ch->get_result()->fetch_assoc();
+    $ch->close();
+    if (!$prow) err('Paper not found.', 404);
+
+    $isAdmin = ($s['role'] === 'admin');
+    $userDeptId = intval($s['dept_id'] ?? 0);
+    $originDeptId = intval($prow['origin_department_id'] ?? 0);
+
+    if (!$isAdmin) {
+        if ($s['role'] !== 'department' || $userDeptId !== $originDeptId) {
+            err('Forbidden.', 403);
+        }
+    }
+
     $st = $db->prepare("DELETE FROM papers WHERE id=?");
     $st->bind_param('i', $id);
     $st->execute();
-    logAdminActivity($db, $s, 'Delete Paper', 'paper', $id, "Deleted paper id {$id}");
+    // log admin activity only if admin
+    if ($isAdmin) logAdminActivity($db, $s, 'Delete Paper', 'paper', $id, "Deleted paper id {$id}");
     ok();
 }
 
@@ -329,6 +351,9 @@ elseif ($action === 'undo_mark') {
     $paper_id = intval($_GET['paper_id'] ?? 0);
     if (!$paper_id) err('Paper ID required.');
 
+    $b = body();
+    $undoReason = trim($b['note'] ?? '');
+
     $db = getDB();
     $current = currentStatus($db, $paper_id);
     $currentAction = $current['action'] ?? null;
@@ -375,12 +400,19 @@ elseif ($action === 'undo_mark') {
 
     $person = $s['username'];
     $note = 'undo: reverted from DONE to ' . $action_val;
+    if ($undoReason) {
+        $note .= ' | reason: ' . $undoReason;
+    }
 
     $ins = $db->prepare("INSERT INTO status_logs (paper_id,action,department_id,user_id,person,note) VALUES (?,?,?,?,?,?)");
     $ins->bind_param('isiiss', $paper_id, $action_val, $dept_id, $s['uid'], $person, $note);
     $ins->execute();
     if ($s['role'] === 'admin') {
-        logAdminActivity($db, $s, 'Undo Paper Status', 'paper', $paper_id, "Reverted DONE to {$action_val}");
+        $details = "Reverted DONE to {$action_val}";
+        if ($undoReason) {
+            $details .= " (reason: {$undoReason})";
+        }
+        logAdminActivity($db, $s, 'Undo Paper Status', 'paper', $paper_id, $details);
     }
     ok(['message' => "Status reverted to $action_val"]);
 }

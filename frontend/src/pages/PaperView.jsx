@@ -8,6 +8,7 @@ import QRCode from '../components/QRCode';
 import Barcode from '../components/Barcode';
 import usePaperNotifications from '../hooks/usePaperNotifications';
 import ErrorModal from '../components/ErrorModal';
+import UndoConfirmModal from '../components/UndoConfirmModal';
 
 export default function PaperView() {
   const { id } = useParams();
@@ -21,6 +22,9 @@ export default function PaperView() {
   const [error, setError]     = useState('');
   const [previewImage, setPreviewImage] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [undoModalOpen, setUndoModalOpen] = useState(false);
+  const [undoNote, setUndoNote] = useState('');
+  const [undoLoading, setUndoLoading] = useState(false);
   const [apiError, setApiError] = useState(null);
   const fileRef = useRef();
   const { notifCount, recentPapers, markNotificationsSeen, markNotificationRead } = usePaperNotifications();
@@ -98,13 +102,18 @@ export default function PaperView() {
   };
 
   const undoMark = async () => {
+    setUndoLoading(true);
     try {
-      await paperAPI.undoMark(parseInt(id));
-      setMsg('Status reverted to IN.');
+      const response = await paperAPI.undoMark(parseInt(id), undoNote.trim());
+      setMsg(response.data?.message || 'Status reverted.');
+      setUndoModalOpen(false);
+      setUndoNote('');
       load();
       setTimeout(() => setMsg(''), 3000);
     } catch (err) {
       setMsg('Error: ' + (err.response?.data?.error || 'Failed to undo'));
+    } finally {
+      setUndoLoading(false);
     }
   };
 
@@ -229,7 +238,7 @@ export default function PaperView() {
                       <p className="sm muted" style={{ marginBottom: 12 }}>This paper is marked as completed.</p>
                       <button
                         className="btn btn-outline"
-                        onClick={undoMark}
+                        onClick={() => setUndoModalOpen(true)}
                         style={{ width: '100%' }}
                       >↶ Undo</button>
                     </div>
@@ -418,6 +427,14 @@ export default function PaperView() {
         {apiError && (
           <ErrorModal open={true} title={apiError.title} message={apiError.message} onClose={() => setApiError(null)} />
         )}
+        <UndoConfirmModal
+          open={undoModalOpen}
+          note={undoNote}
+          onNoteChange={setUndoNote}
+          loading={undoLoading}
+          onCancel={() => setUndoModalOpen(false)}
+          onConfirm={undoMark}
+        />
 
       </div>
     </div>

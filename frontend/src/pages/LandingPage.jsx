@@ -28,9 +28,10 @@ export default function LandingPage() {
     e.preventDefault();
     const value = String(ref).trim();
 
-    if (!/^\d+$/.test(value)) {
-      setError('Enter a valid document reference number.');
-      setWarning(isDesktop ? 'Invalid input. Please enter numbers only.' : '');
+    // allow alphanumeric reference codes (letters and numbers)
+    if (!/^[A-Za-z0-9]+$/.test(value)) {
+      setError('Enter a valid document reference.');
+      setWarning(isDesktop ? 'Invalid input. Please enter letters and numbers only.' : '');
       return;
     }
 
@@ -70,16 +71,16 @@ export default function LandingPage() {
               id="document-ref"
               className="search-input"
               type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
+              inputMode="text"
+              pattern="[A-Za-z0-9]*"
               autoComplete="off"
               enterKeyHint="search"
               value={ref}
               onChange={e => {
                 const value = e.target.value;
-                setRef(isDesktop ? value : value.replace(/[^\d]/g, ''));
-                if (isDesktop && /[^\d\s]/.test(value)) {
-                  setWarning('Invalid input. Kindly use numbers only.');
+                setRef(isDesktop ? value : value.replace(/[^0-9a-zA-Z]/g, ''));
+                if (isDesktop && /[^0-9a-zA-Z\s]/.test(value)) {
+                  setWarning('Invalid input. Kindly use letters and numbers only.');
                 } else {
                   setWarning('');
                 }
@@ -87,7 +88,7 @@ export default function LandingPage() {
                   setError('');
                 }
               }}
-              placeholder="Search by document reference number"
+              placeholder="Search by document reference"
             />
             <button type="submit" className="btn btn-navy search-btn">Search</button>
           </div>

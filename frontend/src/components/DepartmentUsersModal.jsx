@@ -111,15 +111,36 @@ export default function DepartmentUsersModal({ dept_id, dept_name, onClose }) {
                 </div>
                 <div className="fg">
                   <label className="lbl">Marker Role</label>
-                  <select 
-                    className="sel"
-                    value={editing ? (editing.marker_role || '') : (form.marker_role || '')}
-                    onChange={e => editing ? setEditing(v => ({ ...v, marker_role: e.target.value || null })) : setForm(v => ({ ...v, marker_role: e.target.value || null }))}
-                  >
-                    <option value="">-- None --</option>
-                    <option value="IN">IN (Entry Marker)</option>
-                    <option value="OUT">OUT (Exit Marker)</option>
-                  </select>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button 
+                      type="button" 
+                      className={`btn btn-sm ${(editing ? editing.marker_role : form.marker_role) === 'IN' ? 'btn-navy' : 'btn-outline'}`} 
+                      onClick={() => {
+                        const currentRole = editing ? editing.marker_role : form.marker_role;
+                        const newRole = currentRole === 'IN' ? null : 'IN';
+                        if (editing) {
+                          setEditing(v => ({ ...v, marker_role: newRole }));
+                        } else {
+                          setForm(v => ({ ...v, marker_role: newRole }));
+                        }
+                      }}
+                      style={{ flex: 1 }}
+                    >↓ IN (Entry)</button>
+                    <button 
+                      type="button" 
+                      className={`btn btn-sm ${(editing ? editing.marker_role : form.marker_role) === 'OUT' ? 'btn-navy' : 'btn-outline'}`} 
+                      onClick={() => {
+                        const currentRole = editing ? editing.marker_role : form.marker_role;
+                        const newRole = currentRole === 'OUT' ? null : 'OUT';
+                        if (editing) {
+                          setEditing(v => ({ ...v, marker_role: newRole }));
+                        } else {
+                          setForm(v => ({ ...v, marker_role: newRole }));
+                        }
+                      }}
+                      style={{ flex: 1 }}
+                    >↑ OUT (Exit)</button>
+                  </div>
                 </div>
                 <button type="submit" className="btn btn-navy btn-full">{editing ? 'Save Changes' : 'Create User'}</button>
               </div>

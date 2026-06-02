@@ -125,11 +125,10 @@ export default function AdminUsers() {
                     {depts.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
                   </select></div>
                 <div className="fg"><label className="lbl">Marker Role</label>
-                  <select className="sel" value={F.marker_role||''} onChange={e=>setF(f=>({...f,marker_role:e.target.value||null}))}>
-                    <option value="">-- None --</option>
-                    <option value="IN">IN (Entry Marker)</option>
-                    <option value="OUT">OUT (Exit Marker)</option>
-                  </select></div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button type="button" className={`btn btn-sm ${F.marker_role === 'IN' ? 'btn-navy' : 'btn-outline'}`} onClick={() => setF(f => ({ ...f, marker_role: F.marker_role === 'IN' ? null : 'IN' }))} style={{ flex: 1 }}>↓ IN (Entry)</button>
+                    <button type="button" className={`btn btn-sm ${F.marker_role === 'OUT' ? 'btn-navy' : 'btn-outline'}`} onClick={() => setF(f => ({ ...f, marker_role: F.marker_role === 'OUT' ? null : 'OUT' }))} style={{ flex: 1 }}>↑ OUT (Exit)</button>
+                  </div></div>
               </>
             )}
             <button type="submit" className="btn btn-navy btn-full">{editing ? 'Save Changes' : 'Create User'}</button>
