@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { paperAPI } from '../utils/api';
 import { useAuth } from '../context/AuthContext';
@@ -26,13 +26,14 @@ export default function PaperView() {
   const [undoNote, setUndoNote] = useState('');
   const [undoLoading, setUndoLoading] = useState(false);
   const [apiError, setApiError] = useState(null);
-  const fileRef = useRef();
   const { notifCount, recentPapers, markNotificationsSeen, markNotificationRead, clearHistory } = usePaperNotifications();
 
   const isAdmin = user?.role === 'admin';
   const currentStatus = paper?.status_action || null;
   const currentStatusDept = paper?.status_dept || null;
   const isOriginDept = !!(user?.dept_name && paper?.origin && user.dept_name === paper.origin);
+  const hasUserMarkedPaper = !!paper?.logs?.some(log => String(log.user_id) === String(user?.id) && ['IN', 'OUT'].includes(log.action));
+  const canCapture = isAdmin || isOriginDept || currentStatus === null || hasUserMarkedPaper;
   const isCurrentDept = !!(user?.dept_name && currentStatusDept && user.dept_name === currentStatusDept);
   const formatDateTime = (value) => value ? new Date(value).toLocaleString('en-PH') : '—';
 
@@ -123,25 +124,6 @@ export default function PaperView() {
       setEditLog(null);
       load();
     } catch {}
-  };
-
-  const uploadImage = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const fd = new FormData();
-    fd.append('paper_id', id);
-    fd.append('image', file);
-    try {
-      await paperAPI.uploadImage(fd);
-      load();
-    } catch (err) {
-      const status = err.response?.status;
-      const backendMsg = err.response?.data?.error || 'Upload failed.';
-      const msg = status === 403
-        ? 'You do not have permission to upload images for this document. Only the document\'s origin department or an administrator may add files.'
-        : backendMsg;
-      setApiError({ title: status === 403 ? 'Action Not Allowed' : 'Upload Failed', message: msg });
-    }
   };
 
   const viewImage = (img) => {
@@ -289,8 +271,6 @@ export default function PaperView() {
         <div className="card mb6">
           <div className="card-head">
             <span className="card-title">🖼️ Document Image</span>
-            <button className="btn btn-gold btn-sm" onClick={() => fileRef.current?.click()}>📷 Upload Image</button>
-            <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={uploadImage} />
           </div>
           <div className="card-body">
             {paper.images?.length > 0 ? (
@@ -315,7 +295,13 @@ export default function PaperView() {
               <div className="center" style={{ padding: '20px 0', color: 'var(--t3)' }}>
                 No image yet.
                 <br />
-                <button className="btn btn-gold btn-sm" style={{ marginTop: 12 }} onClick={() => fileRef.current?.click()}>📷 Capture Document Image</button>
+                {canCapture ? (
+                  <button className="btn btn-gold btn-sm" style={{ marginTop: 12 }} onClick={() => nav(`/paper/${id}/capture`)}>📷 Capture Document Image</button>
+                ) : (
+                  <div style={{ marginTop: 12, maxWidth: 300 }}>
+                    Capture is only available to the paper origin department or an administrator, or if your account previously marked this paper IN/OUT.
+                  </div>
+                )}
               </div>
             )}
           </div>

@@ -520,10 +520,34 @@ elseif ($action === 'upload_image') {
     if (!$prow) err('Paper not found.', 404);
     $origin_dept = intval($prow['origin_department_id'] ?? 0);
 
-    // allow only admin or the origin department to upload images for this paper
+    // allow admin, origin department, any department when paper has no status yet,
+    // or any user who previously marked this paper IN/OUT.
     if ($s['role'] !== 'admin') {
         $ownDept = intval($s['dept_id'] ?? 0);
-        if (!$ownDept || $origin_dept !== $ownDept) {
+        $uid = intval($s['uid']);
+        $allowed = false;
+
+        if ($ownDept && $origin_dept === $ownDept) {
+            $allowed = true;
+        }
+
+        $current = currentStatus($db, $paper_id);
+        if (!$current['action']) {
+            $allowed = true;
+        }
+
+        if (!$allowed) {
+            $logCheck = $db->prepare("SELECT 1 FROM status_logs WHERE paper_id=? AND user_id=? AND action IN ('IN','OUT') LIMIT 1");
+            $logCheck->bind_param('ii', $paper_id, $uid);
+            $logCheck->execute();
+            $hasMark = $logCheck->get_result()->fetch_assoc();
+            $logCheck->close();
+            if ($hasMark) {
+                $allowed = true;
+            }
+        }
+
+        if (!$allowed) {
             err('Forbidden.', 403);
         }
     }

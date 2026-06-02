@@ -17,27 +17,47 @@ export default function CaptureDocument() {
   const [msg, setMsg]         = useState('');
   const [error, setError]     = useState('');
   const [cameraFacing, setCameraFacing] = useState('environment');
+  const [isDesktop, setIsDesktop] = useState(true);
   const videoRef = useRef();
   const canvasRef = useRef();
   const { notifCount, recentPapers, markNotificationsSeen, markNotificationRead, clearHistory } = usePaperNotifications();
 
   const { user } = useAuth();
 
-useEffect(() => {
-  paperAPI.view(id)
-    .then(r => {
-      const p = r.data.paper;
-      setPaper(p);
-      // Only origin department or admin can capture
-      if (user?.role !== 'admin' && user?.dept_name !== p.origin) {
-        nav(`/paper/${id}`);
-      }
-    })
-    .catch(() => nav(user?.role === 'admin' ? '/admin' : '/dept', { replace: true }));
-  return () => stopCamera();
-}, [id]);
+  const hasMarkedPaper = (p) => {
+    return !!p?.logs?.some(log => String(log.user_id) === String(user?.id) && ['IN', 'OUT'].includes(log.action));
+  };
+
+  const canCapturePaper = (p) => {
+    if (!p) return false;
+    if (user?.role === 'admin') return true;
+    if (user?.dept_name && p.origin && user.dept_name === p.origin) return true;
+    if (p.status_action === null) return true;
+    return hasMarkedPaper(p);
+  };
+
+  useEffect(() => {
+    if (!user) return;
+    paperAPI.view(id)
+      .then(r => {
+        const p = r.data.paper;
+        setPaper(p);
+        if (!canCapturePaper(p)) {
+          nav(`/paper/${id}`);
+        }
+      })
+      .catch(() => nav(user?.role === 'admin' ? '/admin' : '/dept', { replace: true }));
+    return () => stopCamera();
+  }, [id, user]);
+  useEffect(() => {
+    const updateViewport = () => setIsDesktop(window.innerWidth > 768);
+    updateViewport();
+    window.addEventListener('resize', updateViewport);
+    return () => window.removeEventListener('resize', updateViewport);
+  }, []);
 
   const startCamera = async () => {
+    if (stream) stopCamera();
     try {
       const constraints = { video: { facingMode: { ideal: cameraFacing } }, audio: false };
       let s;
@@ -135,14 +155,16 @@ useEffect(() => {
 
             {tab === 'camera' && (
               <div>
-                <div className="camera-switch-row" style={{ marginBottom: 12 }}>
-                  <button type="button" className={`btn btn-sm ${cameraFacing === 'environment' ? 'btn-navy' : 'btn-outline'}`} onClick={() => setCameraFacing('environment')}>
-                    📷 Back Camera
-                  </button>
-                  <button type="button" className={`btn btn-sm ${cameraFacing === 'user' ? 'btn-navy' : 'btn-outline'}`} onClick={() => setCameraFacing('user')}>
-                    🤳 Front Camera
-                  </button>
-                </div>
+                {!isDesktop && (
+                  <div className="camera-switch-row" style={{ marginBottom: 12 }}>
+                    <button type="button" className={`btn btn-sm ${cameraFacing === 'environment' ? 'btn-navy' : 'btn-outline'}`} onClick={() => setCameraFacing('environment')}>
+                      📷 Back Camera
+                    </button>
+                    <button type="button" className={`btn btn-sm ${cameraFacing === 'user' ? 'btn-navy' : 'btn-outline'}`} onClick={() => setCameraFacing('user')}>
+                      🤳 Front Camera
+                    </button>
+                  </div>
+                )}
                 {/* Video / captured preview */}
                 <div className="capture-stage">
                   {!stream && !captured && (
