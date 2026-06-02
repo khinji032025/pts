@@ -165,7 +165,7 @@ export default function DepartmentUsersModal({ dept_id, dept_name, onClose }) {
                           <td style={{ textAlign: 'right' }}>
                             <div className="row" style={{ justifyContent: 'flex-end', gap: 4 }}>
                               <button type="button" className="btn btn-outline btn-sm" onClick={() => { setEditing({ ...u, password: '' }); setError(''); setOk(''); }}>Edit</button>
-                              <button type="button" className="btn btn-red btn-sm" onClick={() => del(u)}>Del</button>
+                              <button type="button" className="btn btn-red btn-sm" onClick={() => del(u)}>Delete</button>
                             </div>
                           </td>
                         </tr>

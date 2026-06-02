@@ -337,7 +337,7 @@ export default function PapersTable({ refresh }) {
             <thead>
               <tr>
                 <th style={{ width:60 }}>Ref</th>
-                <th>Title</th>
+                <th style={{ textAlign: 'center' }}>Title</th>
                 <th>Origin</th>
                 <th>Created</th>
                 <th>Status</th>
@@ -352,7 +352,7 @@ export default function PapersTable({ refresh }) {
                     <td onClick={() => nav(`/paper/${p.id}`)} style={{ cursor: 'pointer' }}>
                       <span className="mono" style={{ fontWeight:700, color:'var(--navy)', fontSize:15 }}>{p.ref_code}</span>
                     </td>
-                    <td style={{ fontWeight:500, maxWidth:240, textAlign: 'left', cursor: 'pointer' }} onClick={() => nav(`/paper/${p.id}`)}>
+                    <td style={{ fontWeight:500, maxWidth:240, textAlign: 'center', cursor: 'pointer' }} onClick={() => nav(`/paper/${p.id}`)}>
                       <span tabIndex={0} role="button" onKeyDown={(e) => { if (e.key === 'Enter') nav(`/paper/${p.id}`); }}>{p.title}</span>
                     </td>
                     <td style={{ fontWeight:500, color:'var(--t1)' }}>{p.origin}</td>

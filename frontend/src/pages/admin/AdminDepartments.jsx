@@ -56,16 +56,16 @@ export default function AdminDepartments() {
   };
 
   return (
-    <div className="g2">
-      <div className="card" style={{ alignSelf:'start' }}>
+    <div className="g2" style={{ gridTemplateColumns: 'minmax(300px, 360px) minmax(0, 1fr)', gap: 16 }}>
+      <div className="card" style={{ alignSelf:'start', maxWidth: 360 }}>
         <div className="card-head"><span className="card-title">🏢 Add Department</span></div>
-        <div className="card-body">
+        <div className="card-body" style={{ padding: 16 }}>
           {error && <div className="alert a-err">{error}</div>}
           {ok    && <div className="alert a-ok">{ok}</div>}
           <form onSubmit={add}>
-            <div className="fg"><label className="lbl">Department Name</label>
-              <input className="inp" value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Budget Office" required /></div>
-            <button type="submit" className="btn btn-navy btn-full">Add Department</button>
+            <div className="fg" style={{ marginBottom: 12 }}><label className="lbl" style={{ fontSize: 13, marginBottom: 6 }}>Department Name</label>
+              <input className="inp" style={{ fontSize: 13, padding: '9px 12px' }} value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Budget Office" required /></div>
+            <button type="submit" className="btn btn-navy btn-full" style={{ padding: '10px 0', fontSize: 14 }}>Add Department</button>
           </form>
         </div>
       </div>
@@ -76,17 +76,17 @@ export default function AdminDepartments() {
           <span className="badge b-none">{depts.length}</span>
         </div>
         <div className="tbl-wrap">
-          {loading ? <div style={{padding:32,textAlign:'center'}}><div className="spinner" style={{margin:'0 auto'}} /></div> : (
-            <table>
-              <thead><tr><th>#</th><th>Name</th><th>Users</th><th style={{textAlign:'right'}}>Actions</th></tr></thead>
+          {loading ? <div style={{padding:24,textAlign:'center'}}><div className="spinner" style={{margin:'0 auto'}} /></div> : (
+            <table style={{ fontSize: 13, borderCollapse: 'collapse' }}>
+              <thead><tr><th style={{ padding: '10px 8px', fontSize: 13 }}>#</th><th style={{ padding: '10px 8px', fontSize: 13 }}>Name</th><th style={{ padding: '10px 8px', fontSize: 13 }}>Users</th><th style={{textAlign:'right', padding: '10px 8px', fontSize: 13}}>Actions</th></tr></thead>
               <tbody>
                 {depts.map(d => (
                   <tr key={d.id}>
-                    <td className="muted sm">{d.id}</td>
-                    <td style={{fontWeight:500}}>{d.name}</td>
-                    <td><span className="badge b-none">{d.user_count}</span></td>
-                    <td style={{textAlign:'right'}}>
-                      <button className="btn btn-red btn-sm" onClick={() => del(d)} disabled={d.user_count>0} title={d.user_count>0?'Has users':'Delete'}>Delete</button>
+                    <td className="muted sm" style={{ padding: '10px 8px' }}>{d.id}</td>
+                    <td style={{fontWeight:500, padding: '10px 8px'}}>{d.name}</td>
+                    <td style={{ padding: '10px 8px' }}><span className="badge b-none" style={{ fontSize: 12, padding: '2px 8px' }}>{d.user_count}</span></td>
+                    <td style={{textAlign:'right', padding: '10px 8px'}}>
+                      <button className="btn btn-red btn-sm" style={{ fontSize: 12, padding: '6px 10px' }} onClick={() => del(d)} disabled={d.user_count>0} title={d.user_count>0?'Has users':'Delete'}>Delete</button>
                     </td>
                   </tr>
                 ))}
