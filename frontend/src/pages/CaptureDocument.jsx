@@ -19,7 +19,7 @@ export default function CaptureDocument() {
   const [cameraFacing, setCameraFacing] = useState('environment');
   const videoRef = useRef();
   const canvasRef = useRef();
-  const { notifCount, recentPapers, markNotificationsSeen, markNotificationRead } = usePaperNotifications();
+  const { notifCount, recentPapers, markNotificationsSeen, markNotificationRead, clearHistory } = usePaperNotifications();
 
   const { user } = useAuth();
 
@@ -104,7 +104,7 @@ useEffect(() => {
 
   return (
     <div>
-      <Navbar title="QR Office" sub="Capture Document" notifCount={notifCount} recentPapers={recentPapers} onNotificationsClick={markNotificationsSeen} onNotificationRead={markNotificationRead} />
+      <Navbar title="QR Office" sub="Capture Document" notifCount={notifCount} recentPapers={recentPapers} onNotificationsClick={markNotificationsSeen} onNotificationRead={markNotificationRead} onClearHistory={clearHistory} />
       <div className="page">
         {paper && (
           <div style={{ marginBottom: 20 }}>

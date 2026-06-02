@@ -21,7 +21,7 @@ export default function AdminDashboard() {
   const [tab, setTab] = useState('departments');
   const [showLoginHistory, setShowLoginHistory] = useState(false);
   const [showAdminActivityHistory, setShowAdminActivityHistory] = useState(false);
-  const { notifCount, recentPapers, markNotificationsSeen, markNotificationRead } = usePaperNotifications();
+  const { notifCount, recentPapers, markNotificationsSeen, markNotificationRead, clearHistory } = usePaperNotifications();
 
   useEffect(() => {
     // If coming back from capture, set tab to papers
@@ -49,6 +49,7 @@ export default function AdminDashboard() {
         onNotificationsClick={() => { markNotificationsSeen(); setTab('papers'); }}
         onNotificationRead={markNotificationRead}
         onNotificationOpen={() => setTab('papers')}
+        onClearHistory={clearHistory}
       />
       <div className="admin-secondary-nav">
         <div className="tabs admin-tabs">

@@ -40,17 +40,28 @@ export default function usePaperNotifications() {
     } catch {}
   }, [isDepartmentUser]);
 
-  const markNotificationRead = useCallback(async (paper_id) => {
-    if (!isDepartmentUser || !paper_id) return;
+  const markNotificationRead = useCallback(async (notif_id) => {
+    if (!isDepartmentUser || !notif_id) return;
     try {
-      await notificationsAPI.markRead({ paper_id });
+      await notificationsAPI.markRead({ notif_id });
       // optimistic UI update
-      setRecentPapers(prev => prev.map(p => p.id === paper_id ? { ...p, is_read: true } : p));
+      setRecentPapers(prev => prev.map(p => p.notif_id === notif_id ? { ...p, is_read: true } : p));
       setNotifCount(c => Math.max(0, c - 1));
       // refresh in background
       setTimeout(() => refreshNotifications(), 500);
     } catch {}
   }, [isDepartmentUser, refreshNotifications]);
 
-  return { notifCount, recentPapers, refreshNotifications, markNotificationsSeen, markNotificationRead };
+  const clearHistory = useCallback(async () => {
+    if (!isDepartmentUser) return;
+    try {
+      await notificationsAPI.clearHistory();
+      setRecentPapers([]);
+      setNotifCount(0);
+      // refresh in background
+      setTimeout(() => refreshNotifications(), 500);
+    } catch {}
+  }, [isDepartmentUser, refreshNotifications]);
+
+  return { notifCount, recentPapers, refreshNotifications, markNotificationsSeen, markNotificationRead, clearHistory };
 }

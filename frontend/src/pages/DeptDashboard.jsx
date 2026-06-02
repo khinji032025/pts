@@ -11,7 +11,7 @@ export default function DeptDashboard() {
   const [error, setError]   = useState('');
   const [ok, setOk]         = useState('');
   const [refresh, setRefresh] = useState(0);
-    const { notifCount, recentPapers, markNotificationsSeen, markNotificationRead } = usePaperNotifications();
+    const { notifCount, recentPapers, markNotificationsSeen, markNotificationRead, clearHistory } = usePaperNotifications();
 
   const create = async (e) => {
     e.preventDefault(); setError(''); setOk('');
@@ -36,6 +36,7 @@ export default function DeptDashboard() {
         recentPapers={recentPapers}
           onNotificationsClick={markNotificationsSeen}
           onNotificationRead={markNotificationRead}
+          onClearHistory={clearHistory}
       />
       <div className="page">
 

@@ -6,7 +6,7 @@ import ScanModal from './ScanModal';
 import DepartmentQRModal from './DepartmentQRModal';
 import DepartmentUsersModal from './DepartmentUsersModal';
 
-export default function Navbar({ title, sub, greeting, notifCount = 0, recentPapers = [], dept_id, dept_name, onNotificationsClick, onNotificationOpen, onNotificationRead }) {
+export default function Navbar({ title, sub, greeting, notifCount = 0, recentPapers = [], dept_id, dept_name, onNotificationsClick, onNotificationOpen, onNotificationRead, onClearHistory }) {
   const { user, logout } = useAuth();
   const nav = useNavigate();
   const [showPw, setShowPw] = useState(false);
@@ -144,15 +144,20 @@ export default function Navbar({ title, sub, greeting, notifCount = 0, recentPap
               overflow: 'hidden',
               zIndex: 200,
             }}>
-              <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <strong style={{ fontSize: 13 }}>New papers</strong>
-                <button className="btn btn-outline btn-sm" type="button" onClick={() => { setShowNotifMenu(false); if (onNotificationsClick) onNotificationsClick(); }}>
-                  Mark all seen
-                </button>
+              <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                <strong style={{ fontSize: 13 }}>📬 Notifications</strong>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button className="btn btn-outline btn-sm" type="button" title="Mark all as read" onClick={() => { setShowNotifMenu(false); if (onNotificationsClick) onNotificationsClick(); }} style={{ fontSize: 11, padding: '4px 8px' }}>
+                    ✓ All
+                  </button>
+                  <button className="btn btn-outline btn-sm" type="button" title="Clear all notifications" onClick={() => { setShowNotifMenu(false); if (onClearHistory) onClearHistory(); }} style={{ fontSize: 11, padding: '4px 8px', color: '#d32f2f' }}>
+                    🗑 Clear
+                  </button>
+                </div>
               </div>
               <div style={{ maxHeight: '320px', overflowY: 'auto' }}>
                 {recentPapers.length > 0 ? recentPapers.map(paper => (
-                  <div key={paper.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border)' }}>
+                  <div key={paper.notif_id} style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', padding: '8px 0', backgroundColor: !paper.is_read ? 'rgba(59, 89, 152, 0.08)' : 'transparent' }}>
                     <button
                       type="button"
                       onClick={() => openNotification(paper)}
@@ -167,15 +172,18 @@ export default function Navbar({ title, sub, greeting, notifCount = 0, recentPap
                     >
                       <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--navy)' }}>Ref #{paper.ref_code} · {paper.origin}</div>
                       <div style={{ fontSize: 13, fontWeight: 600, marginTop: 2 }}>{paper.title}</div>
-                      <div style={{ fontSize: 11, color: 'var(--t3)', marginTop: 2 }}>
-                        {new Date(paper.created_at).toLocaleString('en-PH', { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                      <div style={{ fontSize: 11, color: 'var(--t3)', marginTop: 4, display: 'flex', justifyContent: 'space-between' }}>
+                        <span>{new Date(paper.created_at).toLocaleString('en-PH', { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+                        {paper.latest_action && paper.latest_dept && (
+                          <span style={{ fontWeight: 600, color: 'var(--navy)' }}>📌 {paper.latest_action} by {paper.latest_dept}</span>
+                        )}
                       </div>
                     </button>
                     <div style={{ padding: '8px' }}>
                       {paper.is_read ? (
                         <span style={{ color: 'green', fontWeight: 700, padding: '6px 8px' }}>✓</span>
                       ) : (
-                        onNotificationRead && <button className="btn btn-outline btn-sm" onClick={() => onNotificationRead(paper.id)}>Mark</button>
+                        onNotificationRead && <button className="btn btn-outline btn-sm" onClick={() => onNotificationRead(paper.notif_id)} style={{ fontSize: 11, padding: '4px 8px' }}>Mark</button>
                       )}
                     </div>
                   </div>

@@ -9,7 +9,7 @@ export default function AdminPapers() {
   const [error, setError]   = useState('');
   const [ok, setOk]         = useState('');
   const [refresh, setRefresh] = useState(0);
-  const { markNotificationsSeen, markNotificationRead } = usePaperNotifications();
+  const { markNotificationsSeen, markNotificationRead, clearHistory } = usePaperNotifications();
 
   useEffect(() => {
     deptAPI.list().then(r => {

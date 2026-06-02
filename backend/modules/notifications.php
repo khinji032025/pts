@@ -24,19 +24,25 @@ $db->query("CREATE TABLE IF NOT EXISTS user_notifications (
 )");
 
 if ($action === 'list') {
-    // return recent papers for the user's department with read flag
+    // return recent notification events for papers relevant to the user
     if ($s['role'] !== 'department') {
         err('Only department users can access notifications.', 403);
     }
 
-    $st = $db->prepare("SELECT p.id,p.ref_code,p.title,p.created_at,d.name origin,un.read_at
-        FROM papers p
+    // Query each notification entry separately (one per action) with latest action info
+    // For each notification entry, compute the paper's action and department as of the notification time
+    // This prevents older notifications from showing the current/latest action (which would make past IN appear as OUT)
+    $st = $db->prepare("SELECT un.id as notif_id, p.id, p.ref_code, p.title, p.created_at as paper_created, un.created_at, un.read_at,
+        d.name origin,
+        (SELECT l.action FROM status_logs l WHERE l.paper_id=p.id AND l.created_at <= un.created_at ORDER BY l.created_at DESC, l.id DESC LIMIT 1) latest_action,
+        (SELECT d2.name FROM status_logs l2 JOIN departments d2 ON d2.id=l2.department_id WHERE l2.paper_id=p.id AND l2.created_at <= un.created_at ORDER BY l2.created_at DESC, l2.id DESC LIMIT 1) latest_dept
+        FROM user_notifications un
+        JOIN papers p ON p.id=un.paper_id
         JOIN departments d ON d.id=p.origin_department_id
-        LEFT JOIN user_notifications un ON un.paper_id=p.id AND un.user_id=?
-        WHERE p.origin_department_id=?
-        ORDER BY p.created_at DESC
-        LIMIT 50");
-    $st->bind_param('ii', $uid, $dept_id);
+        WHERE un.user_id=? AND (p.origin_department_id=? OR EXISTS (SELECT 1 FROM status_logs sl WHERE sl.paper_id=p.id AND sl.user_id=?))
+        ORDER BY un.created_at DESC
+        LIMIT 100");
+    $st->bind_param('iii', $uid, $dept_id, $uid);
     $st->execute();
     $res = $st->get_result();
     $items = [];
@@ -51,41 +57,34 @@ if ($action === 'list') {
 
 elseif ($action === 'mark_read') {
     $b = body();
-    $paper_id = intval($b['paper_id'] ?? 0);
-    if (!$paper_id) err('paper_id required.');
+    $notif_id = intval($b['notif_id'] ?? 0);
+    if (!$notif_id) err('notif_id required.');
 
-    // Only mark notifications for papers that belong to the user's department
-    $ch = $db->prepare("SELECT origin_department_id FROM papers WHERE id=?");
-    $ch->bind_param('i', $paper_id);
-    $ch->execute();
-    $row = $ch->get_result()->fetch_assoc();
-    $ch->close();
-    if (!$row) err('Paper not found.', 404);
-    if (intval($row['origin_department_id']) !== $dept_id) err('Forbidden.', 403);
-
-    $ins = $db->prepare("INSERT INTO user_notifications (user_id,paper_id,read_at) VALUES (?,?,NOW()) ON DUPLICATE KEY UPDATE read_at=VALUES(read_at)");
-    $ins->bind_param('ii', $uid, $paper_id);
-    $ins->execute();
+    // Mark this specific notification as read
+    $upd = $db->prepare("UPDATE user_notifications SET read_at=NOW() WHERE id=? AND user_id=?");
+    $upd->bind_param('ii', $notif_id, $uid);
+    $upd->execute();
+    if ($upd->affected_rows === 0) err('Notification not found or forbidden.', 404);
     ok();
 }
 
 elseif ($action === 'mark_all_read') {
-    // Mark all current department papers as read for this user.
+    // Mark all unread notifications as read for this user.
     if ($s['role'] !== 'department') err('Only department users can perform this.', 403);
 
-    // 1) update existing rows
-    $upd = $db->prepare("UPDATE user_notifications un JOIN papers p ON p.id=un.paper_id SET un.read_at=NOW() WHERE un.user_id=? AND p.origin_department_id=? AND un.read_at IS NULL");
-    $upd->bind_param('ii', $uid, $dept_id);
+    $upd = $db->prepare("UPDATE user_notifications un JOIN papers p ON p.id=un.paper_id SET un.read_at=NOW() WHERE un.user_id=? AND (p.origin_department_id=? OR EXISTS (SELECT 1 FROM status_logs sl WHERE sl.paper_id=p.id AND sl.user_id=?)) AND un.read_at IS NULL");
+    $upd->bind_param('iii', $uid, $dept_id, $uid);
     $upd->execute();
+    ok();
+}
 
-    // 2) insert missing rows
-    $ins = $db->prepare("INSERT INTO user_notifications (user_id,paper_id,read_at)
-        SELECT ?, p.id, NOW() FROM papers p
-        LEFT JOIN user_notifications un ON un.paper_id=p.id AND un.user_id=?
-        WHERE p.origin_department_id=? AND un.id IS NULL");
-    $ins->bind_param('iii', $uid, $uid, $dept_id);
-    $ins->execute();
+elseif ($action === 'clear_history') {
+    // Delete all notification entries for the user
+    if ($s['role'] !== 'department') err('Only department users can perform this.', 403);
 
+    $del = $db->prepare("DELETE un FROM user_notifications un JOIN papers p ON p.id=un.paper_id WHERE un.user_id=? AND (p.origin_department_id=? OR EXISTS (SELECT 1 FROM status_logs sl WHERE sl.paper_id=p.id AND sl.user_id=?))");
+    $del->bind_param('iii', $uid, $dept_id, $uid);
+    $del->execute();
     ok();
 }
 

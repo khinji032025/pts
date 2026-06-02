@@ -5,6 +5,17 @@ require_once __DIR__ . '/../middleware/auth.php';
 
 cors();
 
+// Ensure notifications table exists (used to track per-user read state)
+$__tmp_db = getDB();
+$__tmp_db->query("CREATE TABLE IF NOT EXISTS user_notifications (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    paper_id INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    read_at TIMESTAMP NULL,
+    UNIQUE KEY uq_user_paper (user_id, paper_id)
+)");
+
 $action = $_GET['action'] ?? '';
 
 function currentStatus($db, $paper_id) {
@@ -328,6 +339,41 @@ elseif ($action === 'mark') {
     $st = $db->prepare("INSERT INTO status_logs (paper_id,action,department_id,user_id,person,note) VALUES (?,?,?,?,?,?)");
     $st->bind_param('isiiss', $paper_id, $act, $dept_id, $s['uid'], $person, $note);
     $st->execute();
+    // Insert fresh notification entries for origin dept users and previous markers
+    try {
+        $actor_uid = intval($s['uid']);
+        $actor_dept_id = intval($s['dept_id'] ?? 0);
+        // Notify origin department users if actor is from a different department
+        if ($actor_dept_id !== $originDept) {
+            $getOriginUsers = $db->prepare("SELECT id FROM users WHERE department_id=? AND id<>?");
+            if ($getOriginUsers) {
+                $getOriginUsers->bind_param('ii', $originDept, $actor_uid);
+                $getOriginUsers->execute();
+                $resOrigin = $getOriginUsers->get_result();
+                while ($userRow = $resOrigin->fetch_assoc()) {
+                    $notifUid = intval($userRow['id']);
+                    $insNotif = $db->prepare("INSERT INTO user_notifications (user_id, paper_id) VALUES (?, ?)");
+                    if ($insNotif) { $insNotif->bind_param('ii', $notifUid, $paper_id); $insNotif->execute(); $insNotif->close(); }
+                }
+                $getOriginUsers->close();
+            }
+        }
+        // Notify previous markers (users who marked this paper before, excluding actor)
+        $getPrevMarkers = $db->prepare("SELECT DISTINCT user_id FROM status_logs WHERE paper_id=? AND user_id<>?");
+        if ($getPrevMarkers) {
+            $getPrevMarkers->bind_param('ii', $paper_id, $actor_uid);
+            $getPrevMarkers->execute();
+            $resPrev = $getPrevMarkers->get_result();
+            while ($markerRow = $resPrev->fetch_assoc()) {
+                $markerUid = intval($markerRow['user_id']);
+                $insNotif2 = $db->prepare("INSERT INTO user_notifications (user_id, paper_id) VALUES (?, ?)");
+                if ($insNotif2) { $insNotif2->bind_param('ii', $markerUid, $paper_id); $insNotif2->execute(); $insNotif2->close(); }
+            }
+            $getPrevMarkers->close();
+        }
+    } catch (Exception $e) {
+        // ignore notification insert failures
+    }
     ok();
 }
 
@@ -407,6 +453,48 @@ elseif ($action === 'undo_mark') {
     $ins = $db->prepare("INSERT INTO status_logs (paper_id,action,department_id,user_id,person,note) VALUES (?,?,?,?,?,?)");
     $ins->bind_param('isiiss', $paper_id, $action_val, $dept_id, $s['uid'], $person, $note);
     $ins->execute();
+    // Notify origin and previous markers about this undo action
+    try {
+        $actor_uid = intval($s['uid']);
+        $actor_dept_id = intval($s['dept_id'] ?? 0);
+        // get origin department for this paper
+        $ch2 = $db->prepare("SELECT origin_department_id FROM papers WHERE id=?");
+        if ($ch2) { 
+            $ch2->bind_param('i', $paper_id); 
+            $ch2->execute(); 
+            $prow2 = $ch2->get_result()->fetch_assoc(); 
+            $ch2->close(); 
+            $origin_dept = intval($prow2['origin_department_id'] ?? 0);
+            // Notify origin dept users if undoer is not from origin
+            if ($actor_dept_id !== $origin_dept) {
+                $getOriginUsers = $db->prepare("SELECT id FROM users WHERE department_id=? AND id<>?");
+                if ($getOriginUsers) {
+                    $getOriginUsers->bind_param('ii', $origin_dept, $actor_uid);
+                    $getOriginUsers->execute();
+                    $resOrigin = $getOriginUsers->get_result();
+                    while ($userRow = $resOrigin->fetch_assoc()) {
+                        $notifUid = intval($userRow['id']);
+                        $insNotif = $db->prepare("INSERT INTO user_notifications (user_id, paper_id) VALUES (?, ?)");
+                        if ($insNotif) { $insNotif->bind_param('ii', $notifUid, $paper_id); $insNotif->execute(); $insNotif->close(); }
+                    }
+                    $getOriginUsers->close();
+                }
+            }
+            // Notify previous markers
+            $getPrevMarkers = $db->prepare("SELECT DISTINCT user_id FROM status_logs WHERE paper_id=? AND user_id<>?");
+            if ($getPrevMarkers) {
+                $getPrevMarkers->bind_param('ii', $paper_id, $actor_uid);
+                $getPrevMarkers->execute();
+                $resPrev = $getPrevMarkers->get_result();
+                while ($markerRow = $resPrev->fetch_assoc()) {
+                    $markerUid = intval($markerRow['user_id']);
+                    $insNotif2 = $db->prepare("INSERT INTO user_notifications (user_id, paper_id) VALUES (?, ?)");
+                    if ($insNotif2) { $insNotif2->bind_param('ii', $markerUid, $paper_id); $insNotif2->execute(); $insNotif2->close(); }
+                }
+                $getPrevMarkers->close();
+            }
+        }
+    } catch (Exception $e) {}
     if ($s['role'] === 'admin') {
         $details = "Reverted DONE to {$action_val}";
         if ($undoReason) {
@@ -571,6 +659,41 @@ elseif ($action === 'scan') {
             $ins->execute();
             $didAutoMark = $ins->affected_rows > 0;
             $ins->close();
+            if ($didAutoMark) {
+                try {
+                    $actor_uid = intval($uid);
+                    $actor_dept_id = intval($actorDeptId);
+                    $origin_dept = intval($originDeptId);
+                    // Notify origin dept users if actor is not from origin
+                    if ($actor_dept_id !== $origin_dept) {
+                        $getOriginUsers = $db->prepare("SELECT id FROM users WHERE department_id=? AND id<>?");
+                        if ($getOriginUsers) {
+                            $getOriginUsers->bind_param('ii', $origin_dept, $actor_uid);
+                            $getOriginUsers->execute();
+                            $resOrigin = $getOriginUsers->get_result();
+                            while ($userRow = $resOrigin->fetch_assoc()) {
+                                $notifUid = intval($userRow['id']);
+                                $insNotif = $db->prepare("INSERT INTO user_notifications (user_id, paper_id) VALUES (?, ?)");
+                                if ($insNotif) { $insNotif->bind_param('ii', $notifUid, $paperId); $insNotif->execute(); $insNotif->close(); }
+                            }
+                            $getOriginUsers->close();
+                        }
+                    }
+                    // Notify previous markers
+                    $getPrevMarkers = $db->prepare("SELECT DISTINCT user_id FROM status_logs WHERE paper_id=? AND user_id<>?");
+                    if ($getPrevMarkers) {
+                        $getPrevMarkers->bind_param('ii', $paperId, $actor_uid);
+                        $getPrevMarkers->execute();
+                        $resPrev = $getPrevMarkers->get_result();
+                        while ($markerRow = $resPrev->fetch_assoc()) {
+                            $markerUid = intval($markerRow['user_id']);
+                            $insNotif2 = $db->prepare("INSERT INTO user_notifications (user_id, paper_id) VALUES (?, ?)");
+                            if ($insNotif2) { $insNotif2->bind_param('ii', $markerUid, $paperId); $insNotif2->execute(); $insNotif2->close(); }
+                        }
+                        $getPrevMarkers->close();
+                    }
+                } catch (Exception $e) {}
+            }
         } else {
             $didAutoMark = false;
         }

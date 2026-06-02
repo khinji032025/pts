@@ -27,7 +27,7 @@ export default function PaperView() {
   const [undoLoading, setUndoLoading] = useState(false);
   const [apiError, setApiError] = useState(null);
   const fileRef = useRef();
-  const { notifCount, recentPapers, markNotificationsSeen, markNotificationRead } = usePaperNotifications();
+  const { notifCount, recentPapers, markNotificationsSeen, markNotificationRead, clearHistory } = usePaperNotifications();
 
   const isAdmin = user?.role === 'admin';
   const currentStatus = paper?.status_action || null;
@@ -173,7 +173,7 @@ export default function PaperView() {
 
   if (error) return (
     <div>
-      <Navbar title="QR Office" notifCount={notifCount} recentPapers={recentPapers} onNotificationsClick={markNotificationsSeen} onNotificationRead={markNotificationRead} />
+      <Navbar title="QR Office" notifCount={notifCount} recentPapers={recentPapers} onNotificationsClick={markNotificationsSeen} onNotificationRead={markNotificationRead} onClearHistory={clearHistory} />
       <div className="page">
         <button className="btn btn-outline btn-sm mb4" onClick={() => nav(user?.role === 'admin' ? '/admin' : '/dept')}>← Back</button>
         <div className="alert a-err">{error}</div>
@@ -185,7 +185,7 @@ export default function PaperView() {
 
   return (
     <div>
-      <Navbar title="QR Office" notifCount={notifCount} recentPapers={recentPapers} onNotificationsClick={markNotificationsSeen} />
+      <Navbar title="QR Office" notifCount={notifCount} recentPapers={recentPapers} onNotificationsClick={markNotificationsSeen} onClearHistory={clearHistory} />
       <div className="page">
         <button className="btn btn-outline btn-sm mb4" onClick={() => nav(-1)}>← Back</button>
         {msg && <div className="alert a-info mb4">{msg}</div>}

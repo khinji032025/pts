@@ -50,6 +50,7 @@ export const notificationsAPI = {
   list: () => api.get('/notifications.php?action=list'),
   markRead: (d) => api.post('/notifications.php?action=mark_read', d),
   markAllRead: () => api.post('/notifications.php?action=mark_all_read'),
+  clearHistory: () => api.post('/notifications.php?action=clear_history'),
 };
 
 export default api;
