@@ -71,10 +71,10 @@ export default function DepartmentUsersModal({ dept_id, dept_name, onClose }) {
 
   const cancelDelete = () => setDeleteTarget(null);
 
-  const confirmDelete = async () => {
+  const confirmDelete = async (force = false) => {
     if (!deleteTarget) return;
     try {
-      await userAPI.delete(deleteTarget.id);
+      await userAPI.delete(deleteTarget.id, { force: force ? 1 : 0 });
       setDeleteTarget(null);
       load();
     } catch (err) {
@@ -198,6 +198,7 @@ export default function DepartmentUsersModal({ dept_id, dept_name, onClose }) {
           open={!!deleteTarget}
           subjectLabel="user"
           subjectName={deleteTarget.username}
+          showForceOption={true}
           onCancel={cancelDelete}
           onConfirm={confirmDelete}
         />

@@ -123,9 +123,54 @@ elseif ($action === 'delete') {
     } else {
         requireAdmin();
     }
+    // Check for dependent records that would prevent deletion (foreign key constraints)
+    $deps = [];
+    $checks = [
+        ['papers', 'created_by', 'papers_created'],
+        ['status_logs', 'user_id', 'status_logs'],
+        ['paper_images', 'uploaded_by', 'paper_images'],
+        ['login_logs', 'user_id', 'login_logs'],
+        ['user_notifications', 'user_id', 'user_notifications']
+    ];
+    foreach ($checks as $c) {
+        list($table, $col, $key) = $c;
+        $q = $db->prepare("SELECT COUNT(*) as c FROM {$table} WHERE {$col}=?");
+        $q->bind_param('i', $id);
+        $q->execute();
+        $r = $q->get_result()->fetch_assoc();
+        if ($r && intval($r['c']) > 0) {
+            $deps[$key] = intval($r['c']);
+        }
+    }
+    if (!empty($deps)) {
+        // If force flag is provided and caller is admin, attempt to reassign dependent records to admin user (id=1)
+        $b = body();
+        $force = !empty($b['force']);
+        if ($force) {
+            // Only admin may use force delete
+            if ($s['role'] !== 'admin') err('Force delete requires admin privileges.', 403);
+            // Determine fallback admin id (prefer user with username 'admin', else id=1)
+            $admRes = $db->query("SELECT id FROM users WHERE username='admin' LIMIT 1");
+            $adminRow = $admRes ? $admRes->fetch_assoc() : null;
+            $fallbackId = $adminRow ? intval($adminRow['id']) : 1;
+            // Reassign dependent records to fallback admin id
+            $db->query("UPDATE papers SET created_by={$fallbackId} WHERE created_by={$id}");
+            $db->query("UPDATE status_logs SET user_id={$fallbackId} WHERE user_id={$id}");
+            $db->query("UPDATE paper_images SET uploaded_by={$fallbackId} WHERE uploaded_by={$id}");
+            $db->query("UPDATE user_notifications SET user_id={$fallbackId} WHERE user_id={$id}");
+            // Note: login_logs and admin_activity_logs have ON DELETE CASCADE and will be handled accordingly
+        } else {
+            $parts = [];
+            foreach ($deps as $k => $v) $parts[] = "{$v} {$k}";
+            err('Cannot delete user: dependent records exist (' . implode(', ', $parts) . ').');
+        }
+    }
+
     $st = $db->prepare("DELETE FROM users WHERE id=?");
     $st->bind_param('i', $id);
-    $st->execute();
+    if (!$st->execute()) {
+        err('Delete failed: ' . $db->error, 500);
+    }
     ok();
 }
 

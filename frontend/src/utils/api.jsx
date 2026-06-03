@@ -29,7 +29,7 @@ export const userAPI = {
   list:   ()        => api.get('/users.php?action=list'),
   create: (d)       => api.post('/users.php?action=create', d),
   update: (id, d)   => api.put(`/users.php?action=update&id=${id}`, d),
-  delete: (id)      => api.delete('/users.php?action=delete', { params: { id } }),
+  delete: (id, opts = {}) => api.delete('/users.php?action=delete', { params: { id }, data: opts }),
 };
 
 export const paperAPI = {

@@ -83,10 +83,10 @@ export default function AdminUsers() {
 
   const cancelDelete = () => setDeleteTarget(null);
 
-  const confirmDelete = async () => {
+  const confirmDelete = async (force = false) => {
     if (!deleteTarget) return;
     try {
-      await userAPI.delete(deleteTarget.id);
+      await userAPI.delete(deleteTarget.id, { force: force ? 1 : 0 });
       if (me?.role === 'admin') {
         try {
           await authAPI.logAdminActivity({
@@ -183,6 +183,7 @@ export default function AdminUsers() {
           open={!!deleteTarget}
           subjectLabel="user"
           subjectName={deleteTarget.username}
+          showForceOption={true}
           onCancel={cancelDelete}
           onConfirm={confirmDelete}
         />
