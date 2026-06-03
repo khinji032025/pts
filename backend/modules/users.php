@@ -104,6 +104,11 @@ elseif ($action === 'update') {
 elseif ($action === 'delete') {
     $s = requireLogin();
     $id = intval($_GET['id'] ?? 0);
+    if (!$id) {
+        $body = body();
+        $id = intval($body['id'] ?? 0);
+    }
+    if (!$id) err('User id required.', 400);
     if ($id === intval($s['uid'])) err('Cannot delete yourself.');
     $db = getDB();
     if ($s['role'] === 'department') {

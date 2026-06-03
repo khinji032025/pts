@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { userAPI } from '../utils/api';
+import DeleteConfirmModal from './DeleteConfirmModal';
 
 export default function DepartmentUsersModal({ dept_id, dept_name, onClose }) {
   const [users, setUsers] = useState([]);
@@ -62,10 +63,19 @@ export default function DepartmentUsersModal({ dept_id, dept_name, onClose }) {
     }
   };
 
-  const del = async (u) => {
-    if (!window.confirm(`Delete "${u.username}"?`)) return;
+  const [deleteTarget, setDeleteTarget] = useState(null);
+
+  const del = (u) => {
+    setDeleteTarget(u);
+  };
+
+  const cancelDelete = () => setDeleteTarget(null);
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
     try {
-      await userAPI.delete(u.id);
+      await userAPI.delete(deleteTarget.id);
+      setDeleteTarget(null);
       load();
     } catch (err) {
       setError(err.response?.data?.error || 'Failed.');
@@ -183,6 +193,15 @@ export default function DepartmentUsersModal({ dept_id, dept_name, onClose }) {
           <button className="btn btn-outline" onClick={onClose}>Close</button>
         </div>
       </div>
+      {deleteTarget && (
+        <DeleteConfirmModal
+          open={!!deleteTarget}
+          subjectLabel="user"
+          subjectName={deleteTarget.username}
+          onCancel={cancelDelete}
+          onConfirm={confirmDelete}
+        />
+      )}
     </div>
   );
 }

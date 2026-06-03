@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { userAPI, deptAPI, authAPI } from '../../utils/api';
 import { useAuth } from '../../context/AuthContext';
+import DeleteConfirmModal from '../../components/DeleteConfirmModal';
 
 export default function AdminUsers() {
   const { user: me } = useAuth();
@@ -75,21 +76,30 @@ export default function AdminUsers() {
   };
 
   const del = async (u) => {
-    if (!window.confirm(`Delete "${u.username}"?`)) return;
+    setDeleteTarget(u);
+  };
+
+  const [deleteTarget, setDeleteTarget] = useState(null);
+
+  const cancelDelete = () => setDeleteTarget(null);
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
     try {
-      await userAPI.delete(u.id);
+      await userAPI.delete(deleteTarget.id);
       if (me?.role === 'admin') {
         try {
           await authAPI.logAdminActivity({
             action: 'Delete User',
             target_type: 'user',
-            target_id: u.id,
-            details: `Deleted user ${u.username}`,
+            target_id: deleteTarget.id,
+            details: `Deleted user ${deleteTarget.username}`,
           });
         } catch (logErr) {
           console.error('Admin activity log failed', logErr);
         }
       }
+      setDeleteTarget(null);
       load();
     } catch (err) { alert(err.response?.data?.error||'Failed.'); }
   };
@@ -168,6 +178,16 @@ export default function AdminUsers() {
           )}
         </div>
       </div>
+      {deleteTarget && (
+        <DeleteConfirmModal
+          open={!!deleteTarget}
+          subjectLabel="user"
+          subjectName={deleteTarget.username}
+          onCancel={cancelDelete}
+          onConfirm={confirmDelete}
+        />
+      )}
     </div>
   );
 }
+
