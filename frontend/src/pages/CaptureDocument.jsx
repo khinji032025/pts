@@ -124,7 +124,7 @@ export default function CaptureDocument() {
 
   return (
     <div>
-      <Navbar title="QR Office" sub="Capture Document" notifCount={notifCount} recentPapers={recentPapers} onNotificationsClick={markNotificationsSeen} onNotificationRead={markNotificationRead} onClearHistory={clearHistory} />
+      <Navbar title="QR Office" notifCount={notifCount} recentPapers={recentPapers} onNotificationsClick={markNotificationsSeen} onNotificationRead={markNotificationRead} onClearHistory={clearHistory} />
       <div className="page">
         {paper && (
           <div style={{ marginBottom: 20 }}>
