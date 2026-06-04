@@ -56,7 +56,7 @@ export default function AdminDepartments() {
   };
 
   return (
-    <div className="g2" style={{ gap: 16 }}>
+    <div className="g2 g2-admin" style={{ gap: 16 }}>
       <div className="card" style={{ alignSelf:'start', maxWidth: 360 }}>
         <div className="card-head"><span className="card-title">🏢 Add Department</span></div>
         <div className="card-body" style={{ padding: 16 }}>

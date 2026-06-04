@@ -108,7 +108,7 @@ export default function AdminUsers() {
   const setF = editing ? (fn => setEditing(u => fn(u))) : (fn => setForm(u => fn(u)));
 
   return (
-    <div className="g2" style={{ gap: 16 }}>
+    <div className="g2 g2-admin" style={{ gap: 16 }}>
       <div className="card" style={{ alignSelf:'start', maxWidth: 380 }}>
         <div className="card-head">
           <span className="card-title">{editing ? '✏️ Edit User' : '👤 Create User'}</span>
