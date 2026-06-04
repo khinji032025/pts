@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS users (
     id INT AUTO_INCREMENT PRIMARY KEY,
     username VARCHAR(50) NOT NULL UNIQUE,
     password VARCHAR(255) NOT NULL,
-    role ENUM('admin','department') NOT NULL DEFAULT 'department',
+    role ENUM('admin','department','pending') NOT NULL DEFAULT 'pending',
     department_id INT NULL,
     marker_role ENUM('IN','OUT') DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

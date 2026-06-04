@@ -1,14 +1,21 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
+const GOOGLE_SCRIPT_SRC = 'https://accounts.google.com/gsi/client';
+
 export default function LoginForm({ compact = false, onSuccess }) {
-  const { login } = useAuth();
+  const { login, googleLogin } = useAuth();
   const nav = useNavigate();
   const [form, setForm] = useState({ username: '', password: '' });
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [googleBusy, setGoogleBusy] = useState(false);
   const [show, setShow] = useState(false);
+  const [googleReady, setGoogleReady] = useState(false);
+  const [googleRendered, setGoogleRendered] = useState(false);
+  const [googleInitError, setGoogleInitError] = useState('');
+  const googleButtonRef = useRef(null);
 
   const handleSuccess = (user) => {
     if (onSuccess) {
@@ -16,6 +23,151 @@ export default function LoginForm({ compact = false, onSuccess }) {
       return;
     }
     nav(user.role === 'admin' ? '/admin' : '/dept');
+  };
+
+  const initGoogle = () => {
+    if (!window.google?.accounts?.id) {
+      setGoogleInitError('Unable to initialize Google Sign-In.');
+      return;
+    }
+
+    const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID;
+    if (!clientId) {
+      setGoogleInitError('Google client ID is not configured.');
+      return;
+    }
+
+    window.google.accounts.id.initialize({
+      client_id: clientId,
+      callback: handleGoogleResponse,
+      ux_mode: 'popup',
+      auto_select: false,
+    });
+    setGoogleReady(true);
+  };
+
+  // Ensure the visible Google button is rendered into the container
+  // after google SDK is ready and the ref is attached.
+  useEffect(() => {
+    if (!googleReady) return;
+    try {
+      if (googleButtonRef.current && window.google?.accounts?.id?.renderButton) {
+        setGoogleRendered(false);
+        window.google.accounts.id.renderButton(googleButtonRef.current, { theme: 'outline', size: 'large', type: 'standard' });
+        setTimeout(() => {
+          if (googleButtonRef.current) {
+            const innerButton = googleButtonRef.current.querySelector('div[role="button"], button');
+            if (innerButton) {
+              innerButton.style.width = '100%';
+              innerButton.style.maxWidth = '100%';
+            }
+          }
+          setGoogleRendered(true);
+        }, 50);
+      }
+    } catch (e) {
+      // ignore render errors
+    }
+  }, [googleReady]);
+
+  useEffect(() => {
+    if (window.google?.accounts?.id) {
+      initGoogle();
+      return;
+    }
+
+    if (document.querySelector(`script[src="${GOOGLE_SCRIPT_SRC}"]`)) {
+      const checkReady = setInterval(() => {
+        if (window.google?.accounts?.id) {
+          clearInterval(checkReady);
+          initGoogle();
+        }
+      }, 250);
+      return () => clearInterval(checkReady);
+    }
+
+    const script = document.createElement('script');
+    script.src = GOOGLE_SCRIPT_SRC;
+    script.async = true;
+    script.defer = true;
+    script.onload = initGoogle;
+    script.onerror = () => setGoogleInitError('Failed to load Google Sign-In script.');
+    document.body.appendChild(script);
+
+    return () => {
+      document.body.removeChild(script);
+    };
+  }, []);
+
+  const handleGoogleResponse = async (response) => {
+    if (!response?.credential) {
+      setError('Google sign-in failed.');
+      setGoogleBusy(false);
+      return;
+    }
+
+    try {
+      const result = await googleLogin(response.credential);
+      if (result.user) {
+        handleSuccess(result.user);
+      } else {
+        setError(result.message || 'Your Google account is pending approval.');
+      }
+    } catch (err) {
+      setError(err.response?.data?.error || err.message || 'Google login failed.');
+    } finally {
+      setGoogleBusy(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    if (!googleReady) {
+      setError(googleInitError || 'Google Sign-In is not ready yet.');
+      return;
+    }
+    setError('');
+    setGoogleBusy(true);
+    let resolved = false;
+    try {
+      window.google.accounts.id.prompt((notification) => {
+        // handle different notification moments to give useful feedback
+        try {
+              if (notification.isNotDisplayed && notification.isNotDisplayed()) {
+                const reason = notification.getNotDisplayedReason && notification.getNotDisplayedReason();
+                const cid = process.env.REACT_APP_GOOGLE_CLIENT_ID || '(not configured)';
+                const origin = window.location.origin;
+                setError('Google prompt not displayed' + (reason ? `: ${reason}` : '.') + `\nClient ID: ${cid}\nOrigin: ${origin}`);
+            resolved = true;
+            setGoogleBusy(false);
+          } else if (notification.isSkippedMoment && notification.isSkippedMoment()) {
+                const reason = notification.getSkippedReason && notification.getSkippedReason();
+                const cid = process.env.REACT_APP_GOOGLE_CLIENT_ID || '(not configured)';
+                const origin = window.location.origin;
+                setError('Google prompt skipped' + (reason ? `: ${reason}` : '.') + `\nClient ID: ${cid}\nOrigin: ${origin}`);
+            resolved = true;
+            setGoogleBusy(false);
+          } else if (notification.isDisplayed && notification.isDisplayed()) {
+            // prompt is shown to the user; keep busy until callback runs
+          }
+        } catch (e) {
+          // ignore notification parsing errors
+        }
+      });
+    } catch (err) {
+      setError('Failed to invoke Google prompt.');
+      setGoogleBusy(false);
+      return;
+    }
+
+    // fallback: if prompt didn't display within 6 seconds, stop busy state and hint troubleshooting
+    setTimeout(() => {
+      if (!resolved) {
+        setGoogleBusy(false);
+        const cid = process.env.REACT_APP_GOOGLE_CLIENT_ID || '(not configured)';
+        const origin = window.location.origin;
+        setError(`No Google account chooser appeared. Check that your Google Client ID (${cid}) allows this site origin (${origin}) and that third-party cookies are enabled.`);
+      }
+    }, 6000);
   };
 
   const submit = async (e) => {
@@ -31,6 +183,7 @@ export default function LoginForm({ compact = false, onSuccess }) {
       setBusy(false);
     }
   };
+
 
   return (
     <>
@@ -65,7 +218,18 @@ export default function LoginForm({ compact = false, onSuccess }) {
         <button type="submit" className="btn btn-navy btn-lg btn-full" disabled={busy}>
           {busy ? 'Signing in…' : 'Sign In'}
         </button>
-        <p className="login-hint">ADMIN and DEPARTMENT accounts sign in here.</p>
+        <div
+          ref={googleButtonRef}
+          style={{
+            marginTop: 12,
+            width: '100%',
+            minHeight: 56,
+            visibility: googleRendered ? 'visible' : 'hidden',
+            display: 'flex',
+            justifyContent: 'center',
+          }}
+        />
+        <p className="login-hint">New users are registered through Google and remain pending until approved by an administrator.</p>
       </form>
     </>
   );

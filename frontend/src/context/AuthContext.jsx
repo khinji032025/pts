@@ -20,6 +20,15 @@ export function AuthProvider({ children }) {
     return r.data.user;
   };
 
+  const googleLogin = async (id_token) => {
+    const r = await authAPI.googleLogin({ id_token });
+    if (r.data.user) {
+      setUser(r.data.user);
+      return { user: r.data.user };
+    }
+    return { message: r.data.message || 'Google sign-in completed.' };
+  };
+
   const qrLogin = async (dept_id) => {
     const r = await authAPI.qrLogin({ dept_id });
     setUser(r.data.user);
@@ -32,7 +41,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <Ctx.Provider value={{ user, loading, login, qrLogin, logout }}>
+    <Ctx.Provider value={{ user, loading, login, googleLogin, qrLogin, logout }}>
       {children}
     </Ctx.Provider>
   );

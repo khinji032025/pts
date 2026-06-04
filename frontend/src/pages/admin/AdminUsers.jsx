@@ -124,10 +124,11 @@ export default function AdminUsers() {
               <input className="inp" style={{ fontSize: 13, padding: '9px 12px' }} type="password" required={!editing} minLength={editing?0:6} value={F.password||''} onChange={e=>setF(f=>({...f,password:e.target.value}))} /></div>
             <div className="fg" style={{ marginBottom: 12 }}><label className="lbl" style={{ fontSize: 13, marginBottom: 6 }}>Role</label>
               <select className="sel" style={{ fontSize: 13, padding: '9px 12px' }} value={F.role} onChange={e=>setF(f=>({...f,role:e.target.value}))}>
+                {F.role === 'pending' && <option value="pending">Pending</option>}
                 <option value="department">Department</option>
                 <option value="admin">Admin</option>
               </select></div>
-            {F.role==='department' && (
+            {(F.role !== 'admin') && (
               <>
                 <div className="fg" style={{ marginBottom: 12 }}><label className="lbl" style={{ fontSize: 13, marginBottom: 6 }}>Department</label>
                   <select className="sel" style={{ fontSize: 13, padding: '9px 12px' }} value={F.dept_id||''} onChange={e=>setF(f=>({...f,dept_id:e.target.value}))}>
@@ -160,7 +161,7 @@ export default function AdminUsers() {
                   <tr key={u.id}>
                     <td className="muted sm" style={{ padding: '10px 8px' }}>{u.id}</td>
                     <td style={{fontWeight:500, padding: '10px 8px'}}>{u.username}</td>
-                    <td style={{ padding: '10px 8px' }}><span className={`badge ${u.role==='admin'?'b-admin':'b-dept'}`} style={{ fontSize: 12, padding: '2px 8px' }}>{u.role}</span></td>
+                    <td style={{ padding: '10px 8px' }}><span className={`badge ${u.role==='admin' ? 'b-admin' : u.role==='department' ? 'b-dept' : 'b-none'}`} style={{ fontSize: 12, padding: '2px 8px' }}>{u.role}</span></td>
                     <td className="muted" style={{ padding: '10px 8px' }}>{u.dept_name||'—'}</td>
                     <td style={{ padding: '10px 8px' }}>{u.marker_role ? <span style={{background:'var(--blue-bg)',color:'var(--blue)',padding:'2px 8px',borderRadius:'4px',fontSize:'11px',fontWeight:'600'}}>{u.marker_role}</span> : <span className="muted">—</span>}</td>
                     <td style={{textAlign:'right', padding: '10px 8px'}}>

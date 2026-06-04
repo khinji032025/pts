@@ -40,6 +40,25 @@ function notifyUsers($db, $paper_id, $user_ids) {
     $ins->close();
 }
 
+function departmentHasAccess($db, $paper_id, $dept_id) {
+    if (!$dept_id) return false;
+    $st = $db->prepare("SELECT 1 FROM papers WHERE id=? AND origin_department_id=? LIMIT 1");
+    if (!$st) return false;
+    $st->bind_param('ii', $paper_id, $dept_id);
+    $st->execute();
+    $hasOrigin = $st->get_result()->fetch_assoc();
+    $st->close();
+    if ($hasOrigin) return true;
+
+    $st = $db->prepare("SELECT 1 FROM status_logs WHERE paper_id=? AND department_id=? LIMIT 1");
+    if (!$st) return false;
+    $st->bind_param('ii', $paper_id, $dept_id);
+    $st->execute();
+    $hasScan = $st->get_result()->fetch_assoc();
+    $st->close();
+    return (bool)$hasScan;
+}
+
 if ($action === 'list') {
     $s = requireLogin();
     $db = getDB();
@@ -50,8 +69,14 @@ if ($action === 'list') {
     $day    = $_GET['day']    ?? '';
     $dept_id = intval($_GET['dept_id'] ?? 0);
 
-    if ($dept_id) {
-        if ($s['role'] !== 'department' || intval($s['dept_id']) !== $dept_id) {
+    if ($s['role'] === 'department') {
+        $dept_id = intval($s['dept_id'] ?? 0);
+        $where[] = "(p.origin_department_id=? OR EXISTS (SELECT 1 FROM status_logs sl WHERE sl.paper_id=p.id AND sl.department_id=?))";
+        $types .= 'ii';
+        $vals[] = $dept_id;
+        $vals[] = $dept_id;
+    } elseif ($dept_id) {
+        if ($s['role'] !== 'admin') {
             err('Forbidden.', 403);
         }
         $where[] = "p.origin_department_id=?";
@@ -127,7 +152,7 @@ elseif ($action === 'public_view') {
 }
 
 elseif ($action === 'view') {
-    requireLogin();
+    $s = requireLogin();
     $id = intval($_GET['id'] ?? 0);
     $db = getDB();
 
@@ -138,6 +163,13 @@ elseif ($action === 'view') {
     $st->close();
 
     if (!$paper) err('Not found.', 404);
+
+    if ($s['role'] === 'department') {
+        $deptId = intval($s['dept_id'] ?? 0);
+        if (!departmentHasAccess($db, $id, $deptId)) {
+            err('Forbidden.', 403);
+        }
+    }
 
     // current status
     $st2 = $db->prepare("SELECT l.action, d.name dept, l.created_at last_scanned_at FROM status_logs l JOIN departments d ON d.id=l.department_id WHERE l.paper_id=? ORDER BY l.created_at DESC, l.id DESC LIMIT 1");

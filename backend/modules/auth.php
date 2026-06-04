@@ -80,6 +80,7 @@ if ($action === 'login') {
     $row = $st->get_result()->fetch_assoc();
 
     if (!$row || !password_verify($p, $row['password'])) err('Invalid username or password.', 401);
+    if ($row['role'] === 'pending') err('Account pending approval by an administrator.', 403);
 
     $_SESSION['uid']         = $row['id'];
     $_SESSION['username']    = $row['username'];
@@ -91,6 +92,44 @@ if ($action === 'login') {
     logDepartmentLogin($db, $row, 'password');
 
     ok(['user' => ['id'=>$row['id'],'username'=>$row['username'],'role'=>$row['role'],'dept_id'=>$row['department_id'],'dept_name'=>$row['dept_name'],'marker_role'=>$row['marker_role']]]);
+}
+
+elseif ($action === 'google_login') {
+    $b = body();
+    $id_token = trim($b['id_token'] ?? '');
+    if (!$id_token) err('Google id token required.', 400);
+
+    $debug = null;
+    $payload = verifyGoogleToken($id_token, $debug);
+    if (!$payload) err('Invalid Google token. ' . ($debug ? $debug : ''), 401);
+    if (empty($payload['email'])) err('Google account email is required.', 400);
+
+    $email = strtolower(trim($payload['email']));
+    $db = getDB();
+    $st = $db->prepare("SELECT u.*, d.name dept_name FROM users u LEFT JOIN departments d ON d.id=u.department_id WHERE u.username=?");
+    $st->bind_param('s', $email);
+    $st->execute();
+    $row = $st->get_result()->fetch_assoc();
+
+    if ($row) {
+        if ($row['role'] === 'pending') err('Your account is pending approval by an administrator.', 403);
+        $_SESSION['uid']         = $row['id'];
+        $_SESSION['username']    = $row['username'];
+        $_SESSION['role']        = $row['role'];
+        $_SESSION['dept_id']     = $row['department_id'];
+        $_SESSION['dept_name']   = $row['dept_name'];
+        $_SESSION['marker_role'] = $row['marker_role'];
+
+        logDepartmentLogin($db, $row, 'google');
+        ok(['user' => ['id'=>$row['id'],'username'=>$row['username'],'role'=>$row['role'],'dept_id'=>$row['department_id'],'dept_name'=>$row['dept_name'],'marker_role'=>$row['marker_role']]]);
+    }
+
+    $dummyPassword = password_hash(bin2hex(random_bytes(16)), PASSWORD_DEFAULT);
+    $st2 = $db->prepare("INSERT INTO users (username,password,role,department_id,marker_role) VALUES (?, ?, 'pending', NULL, NULL)");
+    $st2->bind_param('ss', $email, $dummyPassword);
+    if (!$st2->execute()) err('Failed to create account.', 500);
+
+    ok(['message' => 'Your account has been created and is pending administrator approval.']);
 }
 
 elseif ($action === 'logout') {

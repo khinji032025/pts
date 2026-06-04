@@ -10,6 +10,7 @@ const api = axios.create({
 
 export const authAPI = {
   login:          (d) => api.post('/auth.php?action=login', d),
+  googleLogin:    (d) => api.post('/auth.php?action=google_login', d),
   logout:         ()  => api.post('/auth.php?action=logout'),
   session:        ()  => api.get('/auth.php?action=session'),
   changePassword: (d) => api.post('/auth.php?action=change_password', d),
