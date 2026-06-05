@@ -12,11 +12,11 @@ if ($action === 'list') {
     $s = requireLogin();
 
     if ($s['role'] === 'admin') {
-        $res = $db->query("SELECT u.id,u.username,u.role,u.department_id,u.marker_role,d.name dept_name,u.created_at FROM users u LEFT JOIN departments d ON d.id=u.department_id ORDER BY u.role DESC, u.username");
+        $res = $db->query("SELECT u.id,u.username,u.role,u.department_id,u.marker_role,u.telegram_chat_id,d.name dept_name,u.created_at FROM users u LEFT JOIN departments d ON d.id=u.department_id ORDER BY u.role DESC, u.username");
     } elseif ($s['role'] === 'department') {
         $dept_id = intval($s['dept_id'] ?? 0);
         if (!$dept_id) err('Department not assigned.', 403);
-        $st = $db->prepare("SELECT u.id,u.username,u.role,u.department_id,u.marker_role,d.name dept_name,u.created_at FROM users u LEFT JOIN departments d ON d.id=u.department_id WHERE u.role='department' AND u.department_id=? ORDER BY u.username");
+        $st = $db->prepare("SELECT u.id,u.username,u.role,u.department_id,u.marker_role,u.telegram_chat_id,d.name dept_name,u.created_at FROM users u LEFT JOIN departments d ON d.id=u.department_id WHERE u.role='department' AND u.department_id=? ORDER BY u.username");
         $st->bind_param('i', $dept_id);
         $st->execute();
         $res = $st->get_result();
@@ -54,8 +54,9 @@ elseif ($action === 'create') {
 
     $db = getDB();
     $hash = password_hash($password, PASSWORD_DEFAULT);
-    $st = $db->prepare("INSERT INTO users (username,password,role,department_id,marker_role) VALUES (?,?,?,?,?)");
-    $st->bind_param('sssis', $username, $hash, $role, $dept_id, $marker_role);
+    $telegram_chat_id = trim($b['telegram_chat_id'] ?? '');
+    $st = $db->prepare("INSERT INTO users (username,password,role,department_id,marker_role,telegram_chat_id) VALUES (?,?,?,?,?,?)");
+    $st->bind_param('sssiss', $username, $hash, $role, $dept_id, $marker_role, $telegram_chat_id);
     if (!$st->execute()) err('Username already taken.');
     $userId = $db->insert_id;
     ok(['id' => $userId]);
@@ -70,6 +71,7 @@ elseif ($action === 'update') {
     $dept_id  = $b['dept_id'] ? intval($b['dept_id']) : null;
     $password = $b['password'] ?? '';
     $marker_role = $b['marker_role'] ?? null;
+    $telegram_chat_id = trim($b['telegram_chat_id'] ?? '');
 
     if ($marker_role && !in_array($marker_role, ['IN', 'OUT'])) err('Invalid marker role.');
 
@@ -87,8 +89,8 @@ elseif ($action === 'update') {
         $dept_id = $ownDept;
     }
 
-    $st = $db->prepare("UPDATE users SET username=?, role=?, department_id=?, marker_role=? WHERE id=?");
-    $st->bind_param('ssssi', $username, $role, $dept_id, $marker_role, $id);
+    $st = $db->prepare("UPDATE users SET username=?, role=?, department_id=?, marker_role=?, telegram_chat_id=? WHERE id=?");
+    $st->bind_param('sssisi', $username, $role, $dept_id, $marker_role, $telegram_chat_id, $id);
     $st->execute();
 
     if ($password && strlen($password) >= 6) {

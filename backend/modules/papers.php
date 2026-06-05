@@ -31,13 +31,132 @@ function currentStatus($db, $paper_id) {
 function notifyUsers($db, $paper_id, $user_ids) {
     $user_ids = array_values(array_unique(array_filter($user_ids, 'intval')));
     if (!$user_ids) return;
-    $ins = $db->prepare("INSERT INTO user_notifications (user_id, paper_id) VALUES (?, ?)");
-    if (!$ins) return;
-    foreach ($user_ids as $uid) {
-        $ins->bind_param('ii', $uid, $paper_id);
-        $ins->execute();
+
+    // Insert notification rows only when not exists to avoid duplicates
+    $ins = $db->prepare("INSERT INTO user_notifications (user_id, paper_id) SELECT ?, ? FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM user_notifications WHERE user_id=? AND paper_id=?)");
+    if ($ins) {
+        foreach ($user_ids as $uid) {
+            $uid_i = intval($uid);
+            $ins->bind_param('iiii', $uid_i, $paper_id, $uid_i, $paper_id);
+            $ins->execute();
+        }
+        $ins->close();
     }
-    $ins->close();
+
+    // Build message text from current paper status
+    $st = $db->prepare("SELECT ref_code FROM papers WHERE id=?");
+    if (!$st) return;
+    $st->bind_param('i', $paper_id);
+    $st->execute();
+    $prow = $st->get_result()->fetch_assoc();
+    $st->close();
+    $ref_code = $prow['ref_code'] ?? ($paper_id ? "#{$paper_id}" : 'unknown');
+    $status = currentStatus($db, $paper_id);
+    $action = $status['action'] ?? 'updated';
+    $dept = $status['dept'] ?? null;
+    $textBase = "Paper {$ref_code} has a new notification: {$action}";
+    if ($dept) $textBase .= " at {$dept}";
+
+    // Send per-user Telegram messages (use user's telegram_chat_id if present)
+    $idList = implode(',', array_map('intval', $user_ids));
+    if ($idList === '') return;
+    $res = $db->query("SELECT id, telegram_chat_id FROM users WHERE id IN ({$idList})");
+    if (!$res) return;
+    while ($u = $res->fetch_assoc()) {
+        $chat = trim($u['telegram_chat_id'] ?? '');
+        if (!$chat) continue;
+        sendTelegramMessage($textBase, $chat);
+    }
+}
+
+function getNotificationRecipients($db, $paper_id, $actor_uid, $actor_dept_id, $action) {
+    $actor_uid = intval($actor_uid);
+    $actor_dept_id = intval($actor_dept_id);
+    $action = strtoupper(trim($action ?? ''));
+    $recipients = [];
+
+    $prev = $db->prepare("SELECT DISTINCT u.id, u.department_id, u.marker_role FROM status_logs sl JOIN users u ON u.id=sl.user_id WHERE sl.paper_id=? AND sl.user_id<>?");
+    if ($prev) {
+        $prev->bind_param('ii', $paper_id, $actor_uid);
+        $prev->execute();
+        $resPrev = $prev->get_result();
+        while ($row = $resPrev->fetch_assoc()) {
+            $uid = intval($row['id']);
+            $dept_id = intval($row['department_id'] ?? 0);
+            $marker_role = strtoupper(trim($row['marker_role'] ?? ''));
+            if ($dept_id === $actor_dept_id) {
+                if ($action === 'OUT' && $marker_role === 'IN') {
+                    $recipients[] = $uid;
+                }
+            } else {
+                $recipients[] = $uid;
+            }
+        }
+        $prev->close();
+    }
+
+    $originDept = 0;
+    $originCheck = $db->prepare("SELECT origin_department_id FROM papers WHERE id=?");
+    if ($originCheck) {
+        $originCheck->bind_param('i', $paper_id);
+        $originCheck->execute();
+        $originRow = $originCheck->get_result()->fetch_assoc();
+        $originCheck->close();
+        $originDept = intval($originRow['origin_department_id'] ?? 0);
+    }
+
+    $handledDepts = $db->prepare("SELECT DISTINCT department_id FROM status_logs WHERE paper_id=? AND department_id IS NOT NULL");
+    if ($handledDepts) {
+        $handledDepts->bind_param('i', $paper_id);
+        $handledDepts->execute();
+        $resDepts = $handledDepts->get_result();
+        while ($d = $resDepts->fetch_assoc()) {
+            $dept_id = intval($d['department_id'] ?? 0);
+            if ($dept_id && $dept_id !== $actor_dept_id) {
+                $deptUsers = $db->prepare("SELECT id FROM users WHERE department_id=?");
+                if ($deptUsers) {
+                    $deptUsers->bind_param('i', $dept_id);
+                    $deptUsers->execute();
+                    $resUsers = $deptUsers->get_result();
+                    while ($userRow = $resUsers->fetch_assoc()) {
+                        $recipients[] = intval($userRow['id']);
+                    }
+                    $deptUsers->close();
+                }
+            }
+        }
+        $handledDepts->close();
+    }
+
+    if ($originDept && $originDept !== $actor_dept_id) {
+        $originUsers = $db->prepare("SELECT id FROM users WHERE department_id=?");
+        if ($originUsers) {
+            $originUsers->bind_param('i', $originDept);
+            $originUsers->execute();
+            $resOriginUsers = $originUsers->get_result();
+            while ($u = $resOriginUsers->fetch_assoc()) {
+                $recipients[] = intval($u['id']);
+            }
+            $originUsers->close();
+        }
+    }
+
+    if ($actor_dept_id && $action === 'OUT') {
+        $inUsers = $db->prepare("SELECT id FROM users WHERE department_id=? AND marker_role='IN'");
+        if ($inUsers) {
+            $inUsers->bind_param('i', $actor_dept_id);
+            $inUsers->execute();
+            $resInUsers = $inUsers->get_result();
+            while ($u = $resInUsers->fetch_assoc()) {
+                $recipients[] = intval($u['id']);
+            }
+            $inUsers->close();
+        }
+    }
+
+    $recipients = array_values(array_unique(array_filter($recipients, 'intval')));
+    $recipients = array_filter($recipients, function ($uid) use ($actor_uid) { return intval($uid) !== intval($actor_uid); });
+    return array_values($recipients);
 }
 
 function departmentHasAccess($db, $paper_id, $dept_id) {
@@ -390,32 +509,8 @@ elseif ($action === 'mark') {
     try {
         $actor_uid = intval($s['uid']);
         $actor_dept_id = intval($s['dept_id'] ?? 0);
-        // Notify origin department users if actor is from a different department
-        $notifyIds = [];
-        if ($actor_dept_id !== $originDept) {
-            $getOriginUsers = $db->prepare("SELECT id FROM users WHERE department_id=? AND id<>?");
-            if ($getOriginUsers) {
-                $getOriginUsers->bind_param('ii', $originDept, $actor_uid);
-                $getOriginUsers->execute();
-                $resOrigin = $getOriginUsers->get_result();
-                while ($userRow = $resOrigin->fetch_assoc()) {
-                    $notifyIds[] = intval($userRow['id']);
-                }
-                $getOriginUsers->close();
-            }
-        }
-        // Notify previous markers (users who marked this paper before, excluding actor)
-        $getPrevMarkers = $db->prepare("SELECT DISTINCT user_id FROM status_logs WHERE paper_id=? AND user_id<>?");
-        if ($getPrevMarkers) {
-            $getPrevMarkers->bind_param('ii', $paper_id, $actor_uid);
-            $getPrevMarkers->execute();
-            $resPrev = $getPrevMarkers->get_result();
-            while ($markerRow = $resPrev->fetch_assoc()) {
-                $notifyIds[] = intval($markerRow['user_id']);
-            }
-            $getPrevMarkers->close();
-        }
-        notifyUsers($db, $paper_id, $notifyIds);
+        $notifyIds = getNotificationRecipients($db, $paper_id, $actor_uid, $actor_dept_id, $act);
+        if (!empty($notifyIds)) notifyUsers($db, $paper_id, $notifyIds);
     } catch (Exception $e) {
         // ignore notification insert failures
     }
@@ -502,41 +597,8 @@ elseif ($action === 'undo_mark') {
     try {
         $actor_uid = intval($s['uid']);
         $actor_dept_id = intval($s['dept_id'] ?? 0);
-        // get origin department for this paper
-        $ch2 = $db->prepare("SELECT origin_department_id FROM papers WHERE id=?");
-        if ($ch2) { 
-            $ch2->bind_param('i', $paper_id); 
-            $ch2->execute(); 
-            $prow2 = $ch2->get_result()->fetch_assoc(); 
-            $ch2->close(); 
-            $origin_dept = intval($prow2['origin_department_id'] ?? 0);
-            // Notify origin dept users if undoer is not from origin
-            if ($actor_dept_id !== $origin_dept) {
-                $getOriginUsers = $db->prepare("SELECT id FROM users WHERE department_id=? AND id<>?");
-                if ($getOriginUsers) {
-                    $getOriginUsers->bind_param('ii', $origin_dept, $actor_uid);
-                    $getOriginUsers->execute();
-                    $resOrigin = $getOriginUsers->get_result();
-                    $notifyIds = [];
-                    while ($userRow = $resOrigin->fetch_assoc()) {
-                        $notifyIds[] = intval($userRow['id']);
-                    }
-                    $getOriginUsers->close();
-                }
-            }
-            // Notify previous markers
-            $getPrevMarkers = $db->prepare("SELECT DISTINCT user_id FROM status_logs WHERE paper_id=? AND user_id<>?");
-            if ($getPrevMarkers) {
-                $getPrevMarkers->bind_param('ii', $paper_id, $actor_uid);
-                $getPrevMarkers->execute();
-                $resPrev = $getPrevMarkers->get_result();
-                while ($markerRow = $resPrev->fetch_assoc()) {
-                    $notifyIds[] = intval($markerRow['user_id']);
-                }
-                $getPrevMarkers->close();
-            }
-            notifyUsers($db, $paper_id, $notifyIds);
-        }
+        $notifyIds = getNotificationRecipients($db, $paper_id, $actor_uid, $actor_dept_id, $action_val);
+        if (!empty($notifyIds)) notifyUsers($db, $paper_id, $notifyIds);
     } catch (Exception $e) {}
     if ($s['role'] === 'admin') {
         $details = "Reverted DONE to {$action_val}";
@@ -747,33 +809,8 @@ elseif ($action === 'scan') {
                 try {
                     $actor_uid = intval($uid);
                     $actor_dept_id = intval($actorDeptId);
-                    $origin_dept = intval($originDeptId);
-                    // Notify origin dept users if actor is not from origin
-                    $notifyIds = [];
-                    if ($actor_dept_id !== $origin_dept) {
-                        $getOriginUsers = $db->prepare("SELECT id FROM users WHERE department_id=? AND id<>?");
-                        if ($getOriginUsers) {
-                            $getOriginUsers->bind_param('ii', $origin_dept, $actor_uid);
-                            $getOriginUsers->execute();
-                            $resOrigin = $getOriginUsers->get_result();
-                            while ($userRow = $resOrigin->fetch_assoc()) {
-                                $notifyIds[] = intval($userRow['id']);
-                            }
-                            $getOriginUsers->close();
-                        }
-                    }
-                    // Notify previous markers
-                    $getPrevMarkers = $db->prepare("SELECT DISTINCT user_id FROM status_logs WHERE paper_id=? AND user_id<>?");
-                    if ($getPrevMarkers) {
-                        $getPrevMarkers->bind_param('ii', $paperId, $actor_uid);
-                        $getPrevMarkers->execute();
-                        $resPrev = $getPrevMarkers->get_result();
-                        while ($markerRow = $resPrev->fetch_assoc()) {
-                            $notifyIds[] = intval($markerRow['user_id']);
-                        }
-                        $getPrevMarkers->close();
-                    }
-                    notifyUsers($db, $paperId, $notifyIds);
+                    $notifyIds = getNotificationRecipients($db, $paperId, $actor_uid, $actor_dept_id, $nextAction);
+                    if (!empty($notifyIds)) notifyUsers($db, $paperId, $notifyIds);
                 } catch (Exception $e) {}
             }
         } else {

@@ -29,8 +29,112 @@ function body() {
     return json_decode(file_get_contents('php://input'), true) ?? [];
 }
 
+function loadEnv($path = null) {
+    $path = $path ?: __DIR__ . '/../../.env';
+    if (!is_file($path)) {
+        return;
+    }
+
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    foreach ($lines as $line) {
+        $line = trim($line);
+        if ($line === '' || strpos($line, '#') === 0) {
+            continue;
+        }
+        if (!strpos($line, '=')) {
+            continue;
+        }
+        list($key, $value) = explode('=', $line, 2);
+        $key = trim($key);
+        $value = trim($value);
+        if ($key === '') {
+            continue;
+        }
+        if (preg_match('/^([\"\"]).*\1$/', $value)) {
+            $value = substr($value, 1, -1);
+        }
+        if (getenv($key) === false) {
+            putenv("{$key}={$value}");
+            $_ENV[$key] = $value;
+            $_SERVER[$key] = $value;
+        }
+    }
+}
+
+loadEnv();
+
 function getGoogleClientId() {
     return trim(getenv('GOOGLE_CLIENT_ID') ?: '');
+}
+
+function getTelegramBotToken() {
+    return trim(getenv('TELEGRAM_BOT_TOKEN') ?: '');
+}
+
+function getTelegramChatId() {
+    return trim(getenv('TELEGRAM_CHAT_ID') ?: '');
+}
+
+function sendTelegramMessage($text, $chatId = null, $parseMode = 'HTML') {
+    $token = getTelegramBotToken();
+    $chatId = $chatId ?: getTelegramChatId();
+    if (!$token || !$chatId || !$text) {
+        @file_put_contents(__DIR__ . '/../logs/telegram.log', date('c') . " - missing token/chat/text\n", FILE_APPEND);
+        return false;
+    }
+
+    $url = "https://api.telegram.org/bot{$token}/sendMessage";
+    $payload = json_encode([
+        'chat_id' => $chatId,
+        'text' => $text,
+        'parse_mode' => $parseMode,
+        'disable_web_page_preview' => true,
+    ]);
+
+    $response = false;
+    $error = '';
+    $httpCode = null;
+
+    if (function_exists('curl_version')) {
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ["Content-Type: application/json"]);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+        $response = curl_exec($ch);
+        if ($response === false) {
+            $error = curl_error($ch);
+        }
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+    } else {
+        $options = [
+            'http' => [
+                'method'  => 'POST',
+                'header'  => "Content-Type: application/json\r\n",
+                'content' => $payload,
+                'timeout' => 10,
+            ],
+        ];
+        $ctx = stream_context_create($options);
+        $response = @file_get_contents($url, false, $ctx);
+        if ($response === false) {
+            $error = 'file_get_contents failed';
+        }
+    }
+
+    $logEntry = [
+        'time' => date('c'),
+        'chat_id' => $chatId,
+        'payload' => $payload,
+        'response' => $response,
+        'error' => $error,
+        'http_code' => $httpCode,
+    ];
+    @file_put_contents(__DIR__ . '/../logs/telegram.log', json_encode($logEntry) . PHP_EOL, FILE_APPEND);
+
+    return $response ? json_decode($response, true) : false;
 }
 
 function base64UrlDecode($input) {
