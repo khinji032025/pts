@@ -32,12 +32,11 @@ function notifyUsers($db, $paper_id, $user_ids) {
     $user_ids = array_values(array_unique(array_filter($user_ids, 'intval')));
     if (!$user_ids) return;
 
-    // Insert notification rows only when not exists to avoid duplicates
-    $ins = $db->prepare("INSERT INTO user_notifications (user_id, paper_id) SELECT ?, ? FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM user_notifications WHERE user_id=? AND paper_id=?)");
+    $ins = $db->prepare("INSERT INTO user_notifications (user_id, paper_id) VALUES (?, ?)");
     if ($ins) {
         foreach ($user_ids as $uid) {
             $uid_i = intval($uid);
-            $ins->bind_param('iiii', $uid_i, $paper_id, $uid_i, $paper_id);
+            $ins->bind_param('ii', $uid_i, $paper_id);
             $ins->execute();
         }
         $ins->close();
@@ -73,74 +72,90 @@ function getNotificationRecipients($db, $paper_id, $actor_uid, $actor_dept_id, $
     $actor_uid = intval($actor_uid);
     $actor_dept_id = intval($actor_dept_id);
     $action = strtoupper(trim($action ?? ''));
-    $recipients = array();
+    $recipients = [];
 
-    // Rule 1: All previous markers from OTHER departments
-    $prevMarkersStmt = $db->prepare("SELECT DISTINCT sl.user_id, u.department_id, u.marker_role FROM status_logs sl JOIN users u ON u.id=sl.user_id WHERE sl.paper_id=? AND sl.user_id<>?");
-    if ($prevMarkersStmt) {
-        $prevMarkersStmt->bind_param('ii', $paper_id, $actor_uid);
-        $prevMarkersStmt->execute();
-        $prevRes = $prevMarkersStmt->get_result();
-        while ($prevRow = $prevRes->fetch_assoc()) {
-            $prevUid = intval($prevRow['user_id']);
-            $prevDept = intval($prevRow['department_id'] ?? 0);
-            $prevMarkerRole = strtoupper(trim($prevRow['marker_role'] ?? ''));
-            
-            // If different department, always add
-            if ($prevDept !== $actor_dept_id) {
-                $recipients[$prevUid] = true;
-            } elseif ($prevDept === $actor_dept_id && $action === 'OUT' && $prevMarkerRole === 'IN') {
-                // Same department exception: add IN-marker users when actor marks OUT
-                $recipients[$prevUid] = true;
+    $prev = $db->prepare("SELECT DISTINCT u.id, u.department_id, u.marker_role FROM status_logs sl JOIN users u ON u.id=sl.user_id WHERE sl.paper_id=? AND sl.user_id<>?");
+    if ($prev) {
+        $prev->bind_param('ii', $paper_id, $actor_uid);
+        $prev->execute();
+        $resPrev = $prev->get_result();
+        while ($row = $resPrev->fetch_assoc()) {
+            $uid = intval($row['id']);
+            $dept_id = intval($row['department_id'] ?? 0);
+            $marker_role = strtoupper(trim($row['marker_role'] ?? ''));
+            if ($dept_id === $actor_dept_id) {
+                if ($action === 'OUT' && $marker_role === 'IN') {
+                    $recipients[] = $uid;
+                }
+            } else {
+                $recipients[] = $uid;
             }
         }
-        $prevMarkersStmt->close();
+        $prev->close();
     }
 
-    // Rule 2: All users from OTHER departments that have handled this paper
-    $handledDeptsStmt = $db->prepare("SELECT DISTINCT department_id FROM status_logs WHERE paper_id=? AND department_id IS NOT NULL");
-    if ($handledDeptsStmt) {
-        $handledDeptsStmt->bind_param('i', $paper_id);
-        $handledDeptsStmt->execute();
-        $handledRes = $handledDeptsStmt->get_result();
-        while ($handledRow = $handledRes->fetch_assoc()) {
-            $handledDept = intval($handledRow['department_id'] ?? 0);
-            
-            if ($handledDept && $handledDept !== $actor_dept_id) {
-                $deptUsersStmt = $db->prepare("SELECT id FROM users WHERE department_id=?");
-                if ($deptUsersStmt) {
-                    $deptUsersStmt->bind_param('i', $handledDept);
-                    $deptUsersStmt->execute();
-                    $deptRes = $deptUsersStmt->get_result();
-                    while ($deptRow = $deptRes->fetch_assoc()) {
-                        $deptUid = intval($deptRow['id']);
-                        if ($deptUid !== $actor_uid) {
-                            $recipients[$deptUid] = true;
-                        }
+    $originDept = 0;
+    $originCheck = $db->prepare("SELECT origin_department_id FROM papers WHERE id=?");
+    if ($originCheck) {
+        $originCheck->bind_param('i', $paper_id);
+        $originCheck->execute();
+        $originRow = $originCheck->get_result()->fetch_assoc();
+        $originCheck->close();
+        $originDept = intval($originRow['origin_department_id'] ?? 0);
+    }
+
+    $handledDepts = $db->prepare("SELECT DISTINCT department_id FROM status_logs WHERE paper_id=? AND department_id IS NOT NULL");
+    if ($handledDepts) {
+        $handledDepts->bind_param('i', $paper_id);
+        $handledDepts->execute();
+        $resDepts = $handledDepts->get_result();
+        while ($d = $resDepts->fetch_assoc()) {
+            $dept_id = intval($d['department_id'] ?? 0);
+            if ($dept_id && $dept_id !== $actor_dept_id) {
+                $deptUsers = $db->prepare("SELECT id FROM users WHERE department_id=?");
+                if ($deptUsers) {
+                    $deptUsers->bind_param('i', $dept_id);
+                    $deptUsers->execute();
+                    $resUsers = $deptUsers->get_result();
+                    while ($userRow = $resUsers->fetch_assoc()) {
+                        $recipients[] = intval($userRow['id']);
                     }
-                    $deptUsersStmt->close();
+                    $deptUsers->close();
                 }
             }
         }
-        $handledDeptsStmt->close();
+        $handledDepts->close();
     }
 
-    // Rule 3: Same-department exception - when marking OUT, notify IN-marker users from same dept
-    if ($actor_dept_id && $action === 'OUT') {
-        $sameDeptInStmt = $db->prepare("SELECT id FROM users WHERE department_id=? AND marker_role='IN' AND id<>?");
-        if ($sameDeptInStmt) {
-            $sameDeptInStmt->bind_param('ii', $actor_dept_id, $actor_uid);
-            $sameDeptInStmt->execute();
-            $sameDeptRes = $sameDeptInStmt->get_result();
-            while ($sameDeptRow = $sameDeptRes->fetch_assoc()) {
-                $sameDeptUid = intval($sameDeptRow['id']);
-                $recipients[$sameDeptUid] = true;
+    if ($originDept && $originDept !== $actor_dept_id) {
+        $originUsers = $db->prepare("SELECT id FROM users WHERE department_id=?");
+        if ($originUsers) {
+            $originUsers->bind_param('i', $originDept);
+            $originUsers->execute();
+            $resOriginUsers = $originUsers->get_result();
+            while ($u = $resOriginUsers->fetch_assoc()) {
+                $recipients[] = intval($u['id']);
             }
-            $sameDeptInStmt->close();
+            $originUsers->close();
         }
     }
 
-    return array_keys($recipients);
+    if ($actor_dept_id && $action === 'OUT') {
+        $inUsers = $db->prepare("SELECT id FROM users WHERE department_id=? AND marker_role='IN'");
+        if ($inUsers) {
+            $inUsers->bind_param('i', $actor_dept_id);
+            $inUsers->execute();
+            $resInUsers = $inUsers->get_result();
+            while ($u = $resInUsers->fetch_assoc()) {
+                $recipients[] = intval($u['id']);
+            }
+            $inUsers->close();
+        }
+    }
+
+    $recipients = array_values(array_unique(array_filter($recipients, 'intval')));
+    $recipients = array_filter($recipients, function ($uid) use ($actor_uid) { return intval($uid) !== intval($actor_uid); });
+    return array_values($recipients);
 }
 
 function departmentHasAccess($db, $paper_id, $dept_id) {
