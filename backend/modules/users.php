@@ -90,7 +90,7 @@ elseif ($action === 'update') {
     }
 
     $st = $db->prepare("UPDATE users SET username=?, role=?, department_id=?, marker_role=?, telegram_chat_id=? WHERE id=?");
-    $st->bind_param('sssisi', $username, $role, $dept_id, $marker_role, $telegram_chat_id, $id);
+    $st->bind_param('ssissi', $username, $role, $dept_id, $marker_role, $telegram_chat_id, $id);
     $st->execute();
 
     if ($password && strlen($password) >= 6) {
