@@ -127,7 +127,8 @@ function getNotificationRecipients($db, $paper_id, $actor_uid, $actor_dept_id, $
         $handledDepts->close();
     }
 
-    if ($originDept && $originDept !== $actor_dept_id) {
+    // Always notify users from the origin department (exclude actor later)
+    if ($originDept) {
         $originUsers = $db->prepare("SELECT id FROM users WHERE department_id=?");
         if ($originUsers) {
             $originUsers->bind_param('i', $originDept);
