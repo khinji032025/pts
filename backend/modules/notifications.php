@@ -44,10 +44,10 @@ if ($action === 'list') {
         FROM user_notifications un
         JOIN papers p ON p.id=un.paper_id
         JOIN departments d ON d.id=p.origin_department_id
-        WHERE un.user_id=? AND (p.origin_department_id=? OR EXISTS (SELECT 1 FROM status_logs sl WHERE sl.paper_id=p.id AND sl.user_id=?))
+        WHERE un.user_id=?
         ORDER BY un.created_at DESC
         LIMIT 100");
-    $st->bind_param('iii', $uid, $dept_id, $uid);
+    $st->bind_param('i', $uid);
     $st->execute();
     $res = $st->get_result();
     $items = [];
@@ -77,8 +77,8 @@ elseif ($action === 'mark_all_read') {
     // Mark all unread notifications as read for this user.
     if ($s['role'] !== 'department') err('Only department users can perform this.', 403);
 
-    $upd = $db->prepare("UPDATE user_notifications un JOIN papers p ON p.id=un.paper_id SET un.read_at=NOW() WHERE un.user_id=? AND (p.origin_department_id=? OR EXISTS (SELECT 1 FROM status_logs sl WHERE sl.paper_id=p.id AND sl.user_id=?)) AND un.read_at IS NULL");
-    $upd->bind_param('iii', $uid, $dept_id, $uid);
+    $upd = $db->prepare("UPDATE user_notifications SET read_at=NOW() WHERE user_id=? AND read_at IS NULL");
+    $upd->bind_param('i', $uid);
     $upd->execute();
     ok();
 }
@@ -87,8 +87,8 @@ elseif ($action === 'clear_history') {
     // Delete all notification entries for the user
     if ($s['role'] !== 'department') err('Only department users can perform this.', 403);
 
-    $del = $db->prepare("DELETE un FROM user_notifications un JOIN papers p ON p.id=un.paper_id WHERE un.user_id=? AND (p.origin_department_id=? OR EXISTS (SELECT 1 FROM status_logs sl WHERE sl.paper_id=p.id AND sl.user_id=?))");
-    $del->bind_param('iii', $uid, $dept_id, $uid);
+    $del = $db->prepare("DELETE FROM user_notifications WHERE user_id=?");
+    $del->bind_param('i', $uid);
     $del->execute();
     ok();
 }
