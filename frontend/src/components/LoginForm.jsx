@@ -218,6 +218,9 @@ export default function LoginForm({ compact = false, onSuccess }) {
         <button type="submit" className="btn btn-navy btn-lg btn-full" disabled={busy}>
           {busy ? 'Signing in…' : 'Sign In'}
         </button>
+
+        <div className="login-or-separator">or</div>
+
         <div
           ref={googleButtonRef}
           style={{
@@ -229,7 +232,7 @@ export default function LoginForm({ compact = false, onSuccess }) {
             justifyContent: 'center',
           }}
         />
-        <p className="login-hint">New users are registered through Google and remain pending until approved by an administrator.</p>
+        <p className="login-hint">If you don't have an account yet, please sign up using Google. New users remain pending until approved by an administrator.</p>
       </form>
     </>
   );
