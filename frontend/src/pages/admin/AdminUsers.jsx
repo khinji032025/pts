@@ -8,7 +8,7 @@ export default function AdminUsers() {
   const [users, setUsers]   = useState([]);
   const [depts, setDepts]   = useState([]);
   const [loading, setLoading] = useState(true);
-  const [form, setForm]     = useState({ username:'', password:'', role:'department', dept_id:'', marker_role:null });
+  const [form, setForm]     = useState({ username:'', password:'', telegram_chat_id:'', role:'department', dept_id:'', marker_role:null });
   const [editing, setEditing] = useState(null);
   const [error, setError]   = useState('');
   const [ok, setOk]         = useState('');
@@ -47,7 +47,7 @@ export default function AdminUsers() {
           console.error('Admin activity log failed', logErr);
         }
       }
-      setForm({username:'',password:'',role:'department',dept_id:'',marker_role:null});
+      setForm({username:'',password:'',telegram_chat_id:'',role:'department',dept_id:'',marker_role:null});
       setOk('User created.');
       load();
     } catch (err) { setError(err.response?.data?.error || 'Failed.'); }
@@ -122,6 +122,8 @@ export default function AdminUsers() {
               <input className="inp" style={{ fontSize: 13, padding: '9px 12px' }} required value={F.username} onChange={e=>setF(f=>({...f,username:e.target.value}))} /></div>
             <div className="fg" style={{ marginBottom: 12 }}><label className="lbl" style={{ fontSize: 13, marginBottom: 6 }}>Password {editing && <span className="muted" style={{ fontSize: 12 }}>(blank = keep)</span>}</label>
               <input className="inp" style={{ fontSize: 13, padding: '9px 12px' }} type="password" required={!editing} minLength={editing?0:6} value={F.password||''} onChange={e=>setF(f=>({...f,password:e.target.value}))} /></div>
+            <div className="fg" style={{ marginBottom: 12 }}><label className="lbl" style={{ fontSize: 13, marginBottom: 6 }}>Telegram Chat ID <span className="muted" style={{ fontSize: 12 }}>(optional)</span></label>
+              <input className="inp" style={{ fontSize: 13, padding: '9px 12px' }} placeholder="e.g., 123456789" value={F.telegram_chat_id||''} onChange={e=>setF(f=>({...f,telegram_chat_id:e.target.value}))} /></div>
             <div className="fg" style={{ marginBottom: 12 }}><label className="lbl" style={{ fontSize: 13, marginBottom: 6 }}>Role</label>
               <select className="sel" style={{ fontSize: 13, padding: '9px 12px' }} value={F.role} onChange={e=>setF(f=>({...f,role:e.target.value}))}>
                 {F.role === 'pending' && <option value="pending">Pending</option>}
@@ -166,7 +168,7 @@ export default function AdminUsers() {
                     <td style={{ padding: '10px 8px' }}>{u.marker_role ? <span style={{background:'var(--blue-bg)',color:'var(--blue)',padding:'2px 8px',borderRadius:'4px',fontSize:'11px',fontWeight:'600'}}>{u.marker_role}</span> : <span className="muted">—</span>}</td>
                     <td style={{textAlign:'right', padding: '10px 8px'}}>
                       <div className="row" style={{justifyContent:'flex-end',gap:4}}>
-                        <button className="btn btn-outline btn-sm" style={{ fontSize: 12, padding: '6px 10px' }} onClick={() => { setEditing({...u,password:''}); setError(''); setOk(''); }}>Edit</button>
+                        <button className="btn btn-outline btn-sm" style={{ fontSize: 12, padding: '6px 10px' }} onClick={() => { setEditing({ ...u, dept_id: u.department_id || '', telegram_chat_id: u.telegram_chat_id || '', password: '' }); setError(''); setOk(''); }}>Edit</button>
                         {u.id !== me?.id && <button className="btn btn-red btn-sm" style={{ fontSize: 12, padding: '6px 10px' }} onClick={() => del(u)}>Delete</button>}
                       </div>
                     </td>

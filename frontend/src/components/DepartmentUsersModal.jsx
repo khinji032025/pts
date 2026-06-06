@@ -5,7 +5,7 @@ import DeleteConfirmModal from './DeleteConfirmModal';
 export default function DepartmentUsersModal({ dept_id, dept_name, onClose }) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState({ username: '', password: '', marker_role: null });
+  const [form, setForm] = useState({ username: '', password: '', telegram_chat_id: '', marker_role: null });
   const [editing, setEditing] = useState(null);
   const [error, setError] = useState('');
   const [ok, setOk] = useState('');
@@ -40,7 +40,7 @@ export default function DepartmentUsersModal({ dept_id, dept_name, onClose }) {
   }, [dept_id]);
 
   const resetForm = () => {
-    setForm({ username: '', password: '', marker_role: null });
+    setForm({ username: '', password: '', telegram_chat_id: '', marker_role: null });
     setEditing(null);
   };
 
@@ -50,10 +50,10 @@ export default function DepartmentUsersModal({ dept_id, dept_name, onClose }) {
     setOk('');
     try {
       if (editing) {
-        await userAPI.update(editing.id, { ...editing, role: 'department', dept_id, password: editing.password || '', marker_role: editing.marker_role || null });
+        await userAPI.update(editing.id, { ...editing, role: 'department', dept_id, password: editing.password || '', marker_role: editing.marker_role || null, telegram_chat_id: editing.telegram_chat_id || '' });
         setOk('User updated.');
       } else {
-        await userAPI.create({ username: form.username, password: form.password, role: 'department', dept_id, marker_role: form.marker_role || null });
+        await userAPI.create({ username: form.username, password: form.password, role: 'department', dept_id, marker_role: form.marker_role || null, telegram_chat_id: form.telegram_chat_id || '' });
         setOk('User created.');
       }
       resetForm();
@@ -117,6 +117,15 @@ export default function DepartmentUsersModal({ dept_id, dept_name, onClose }) {
                     minLength={editing ? 0 : 6}
                     value={editing ? (editing.password || '') : form.password}
                     onChange={e => editing ? setEditing(v => ({ ...v, password: e.target.value })) : setForm(v => ({ ...v, password: e.target.value }))}
+                  />
+                </div>
+                <div className="fg">
+                  <label className="lbl">Telegram Chat ID <span className="muted">(optional)</span></label>
+                  <input
+                    className="inp"
+                    placeholder="e.g., 123456789"
+                    value={editing ? (editing.telegram_chat_id || '') : form.telegram_chat_id}
+                    onChange={e => editing ? setEditing(v => ({ ...v, telegram_chat_id: e.target.value })) : setForm(v => ({ ...v, telegram_chat_id: e.target.value }))}
                   />
                 </div>
                 <div className="fg">
