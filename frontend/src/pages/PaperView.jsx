@@ -18,6 +18,7 @@ export default function PaperView() {
   const [loading, setLoading] = useState(true);
   const [editLog, setEditLog] = useState(null);
   const [personName, setPersonName] = useState(user?.username || '');
+  const [markRemark, setMarkRemark] = useState('');
   const [msg, setMsg]         = useState('');
   const [error, setError]     = useState('');
   const [previewImage, setPreviewImage] = useState(null);
@@ -37,6 +38,10 @@ export default function PaperView() {
   const canDeleteImage = isAdmin || isOriginDept || hasUserMarkedPaper;
   const isCurrentDept = !!(user?.dept_name && currentStatusDept && user.dept_name === currentStatusDept);
   const formatDateTime = (value) => value ? new Date(value).toLocaleString('en-PH') : '—';
+  const latestLog = paper?.logs?.[0] || null;
+  const isLatestLogOwner = latestLog && String(latestLog.user_id) === String(user?.id);
+  const isEditableLog = (log) => isAdmin || (latestLog && isLatestLogOwner && latestLog.id === log.id);
+  const canEditAnyLog = isAdmin || isLatestLogOwner;
 
   const canMarkIn = isAdmin || currentStatus === 'OUT' || currentStatus === null;
   const canMarkOut = isAdmin || (currentStatus === 'IN' && isCurrentDept);
@@ -94,8 +99,9 @@ export default function PaperView() {
 
   const mark = async (action, person) => {
     try {
-      await paperAPI.mark({ paper_id: parseInt(id), action, dept_id: user.dept_id, note: 'manual', person });
+      await paperAPI.mark({ paper_id: parseInt(id), action, dept_id: user.dept_id, note: markRemark.trim() || 'manual', person });
       setMsg(`Marked ${action}.`);
+      setMarkRemark('');
       load();
       setTimeout(() => setMsg(''), 3000);
     } catch (err) {
@@ -204,17 +210,30 @@ export default function PaperView() {
                 <div className="lbl" style={{ marginBottom: 10 }}>Quick Status Update</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 12 }}>
                   {currentStatus !== 'DONE' && (
-                    <div>
-                      <label className="lbl" style={{ display: 'block', marginBottom: 6 }}>Person</label>
-                      <input
-                        className="inp"
-                        type="text"
-                        value={personName}
-                        placeholder="Name of person who submitted/marked this paper"
-                        onChange={e => setPersonName(e.target.value)}
-                        style={{ width: '100%' }}
-                      />
-                    </div>
+                    <>
+                      <div>
+                        <label className="lbl" style={{ display: 'block', marginBottom: 6 }}>Person</label>
+                        <input
+                          className="inp"
+                          type="text"
+                          value={personName}
+                          placeholder="Name of person who submitted/marked this paper"
+                          onChange={e => setPersonName(e.target.value)}
+                          style={{ width: '100%' }}
+                        />
+                      </div>
+                      <div>
+                        <label className="lbl" style={{ display: 'block', marginBottom: 6 }}>Remarks</label>
+                        <textarea
+                          className="inp"
+                          rows={3}
+                          placeholder="Optional instructions, issues, or notes for the next department."
+                          value={markRemark}
+                          onChange={e => setMarkRemark(e.target.value)}
+                          style={{ width: '100%', resize: 'vertical' }}
+                        />
+                      </div>
+                    </>
                   )}
                   {currentStatus === 'DONE' ? (
                     <div>
@@ -328,8 +347,8 @@ export default function PaperView() {
                   <th>Department</th>
                   <th>User</th>
                   <th>Person</th>
-                  <th>Note</th>
-                  {isAdmin && <th>Edit</th>}
+                  <th>Remarks</th>
+                  {canEditAnyLog && <th>Edit</th>}
                 </tr>
               </thead>
               <tbody>
@@ -337,7 +356,7 @@ export default function PaperView() {
                   <tr key={log.id}>
                     <td className="sm muted" style={{ whiteSpace: 'nowrap' }}>{new Date(log.created_at).toLocaleString('en-PH')}</td>
                     <td>
-                      {editLog?.id === log.id
+                      {editLog?.id === log.id && isAdmin
                         ? <select className="sel" style={{ width: 80 }} value={editLog.action} onChange={e => setEditLog(l => ({ ...l, action: e.target.value }))}>
                             <option>IN</option><option>OUT</option><option>DONE</option>
                           </select>
@@ -346,7 +365,7 @@ export default function PaperView() {
                     <td>{log.dept_name}</td>
                     <td className="sm muted">{log.username}</td>
                     <td className="sm">
-                      {editLog?.id === log.id
+                      {editLog?.id === log.id && isAdmin
                         ? <input className="inp" style={{ width: 140 }} value={editLog.person} onChange={e => setEditLog(l => ({ ...l, person: e.target.value }))} />
                         : log.person || '—'}
                     </td>
@@ -355,19 +374,21 @@ export default function PaperView() {
                         ? <input className="inp" style={{ width: 110 }} value={editLog.note} onChange={e => setEditLog(l => ({ ...l, note: e.target.value }))} />
                         : <span className="badge b-none">{log.note || 'manual'}</span>}
                     </td>
-                    {isAdmin && (
+                    {canEditAnyLog && (
                       <td>
                         {editLog?.id === log.id
                           ? <div className="row" style={{ gap: 4 }}>
                               <button className="btn btn-navy btn-sm" onClick={saveLog}>Save</button>
                               <button className="btn btn-outline btn-sm" onClick={() => setEditLog(null)}>Cancel</button>
                             </div>
-                          : <button className="btn btn-outline btn-sm" onClick={() => setEditLog({ id: log.id, action: log.action, person: log.person || '', note: log.note || '' })}>Edit</button>}
+                          : isEditableLog(log)
+                              ? <button className="btn btn-outline btn-sm" onClick={() => setEditLog({ id: log.id, action: log.action, person: log.person || '', note: log.note || '' })}>Edit</button>
+                              : null}
                       </td>
                     )}
                   </tr>
                 )) : (
-                  <tr><td colSpan={7} style={{ textAlign: 'center', padding: 24, color: 'var(--t3)' }}>No status history yet.</td></tr>
+                  <tr><td colSpan={canEditAnyLog ? 7 : 6} style={{ textAlign: 'center', padding: 24, color: 'var(--t3)' }}>No status history yet.</td></tr>
                 )}
               </tbody>
             </table>

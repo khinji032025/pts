@@ -518,17 +518,47 @@ elseif ($action === 'mark') {
 }
 
 elseif ($action === 'edit_log') {
-    $s = requireAdmin();
+    $s = requireLogin();
     $id = intval($_GET['id'] ?? 0);
     $b = body();
-    $act  = $b['action'] ?? '';
-    $person = trim($b['person'] ?? '');
     $note = $b['note'] ?? '';
     $db = getDB();
+    $check = $db->prepare("SELECT paper_id, id, department_id, user_id, action, person FROM status_logs WHERE id=?");
+    $check->bind_param('i', $id);
+    $check->execute();
+    $row = $check->get_result()->fetch_assoc();
+    $check->close();
+    if (!$row) err('Status log not found.', 404);
+
+    if ($s['role'] !== 'admin') {
+        if (intval($row['user_id']) !== intval($s['uid'])) {
+            err('Forbidden.', 403);
+        }
+        $latestCheck = $db->prepare("SELECT id FROM status_logs WHERE paper_id=? ORDER BY created_at DESC, id DESC LIMIT 1");
+        $latestCheck->bind_param('i', $row['paper_id']);
+        $latestCheck->execute();
+        $latestRow = $latestCheck->get_result()->fetch_assoc();
+        $latestCheck->close();
+        if (!$latestRow || intval($latestRow['id']) !== intval($id)) {
+            err('Forbidden.', 403);
+        }
+    }
+
+    if ($s['role'] === 'admin') {
+        $act = $b['action'] ?? $row['action'];
+        $person = trim($b['person'] ?? $row['person'] ?? '');
+    } else {
+        $act = $row['action'];
+        $person = $row['person'];
+    }
+
     $st = $db->prepare("UPDATE status_logs SET action=?,person=?,note=? WHERE id=?");
     $st->bind_param('sssi', $act, $person, $note, $id);
     $st->execute();
-    logAdminActivity($db, $s, 'Edit Paper Log', 'status_log', $id, "Updated status log id {$id} to {$act}");
+
+    if ($s['role'] === 'admin') {
+        logAdminActivity($db, $s, 'Edit Paper Log', 'status_log', $id, "Updated status log id {$id} to {$act}");
+    }
     ok();
 }
 
@@ -795,6 +825,10 @@ elseif ($action === 'scan') {
 
         $person = $s['username'];
         $note = 'qr-auto-scan';
+        $prevNote = trim($last['note'] ?? '');
+        if ($prevNote !== '' && $prevNote !== 'qr-auto-scan' && $prevNote !== 'manual') {
+            $note = $prevNote;
+        }
 
         if ($nextAction) {
             // Atomic dedupe: block duplicate auto-scan insert from same user within 3 seconds.

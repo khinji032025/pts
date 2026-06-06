@@ -62,7 +62,7 @@ export default function PublicDocumentView() {
                     <th>Department</th>
                     <th>User</th>
                     <th>Person</th>
-                    <th>Note</th>
+                    <th>Remarks</th>
                   </tr>
                 </thead>
                 <tbody>

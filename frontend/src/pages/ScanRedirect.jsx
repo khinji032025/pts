@@ -13,6 +13,9 @@ export default function ScanRedirect() {
   const [loading, setLoading] = useState(true);
   const [done, setDone]     = useState('');
   const [error, setError]   = useState('');
+  const [remark, setRemark] = useState('');
+  const [savingRemark, setSavingRemark] = useState(false);
+  const [remarkMsg, setRemarkMsg] = useState('');
   const [markerRoleWarning, setMarkerRoleWarning] = useState(null);
   const scanRunningRef = useRef(false);
 
@@ -89,6 +92,7 @@ export default function ScanRedirect() {
         const r = await paperAPI.scan(scannedRef, { auto: 1 });
         const scannedPaper = r.data.paper;
         setPaper(scannedPaper);
+        setRemark(scannedPaper?.logs?.[0]?.note === 'qr-auto-scan' ? '' : scannedPaper?.logs?.[0]?.note || '');
         setDone(scannedPaper?.status_action || 'IN');
       } catch (err) {
         const errorMsg = err.response?.data?.error || 'Paper not found.';
@@ -136,6 +140,34 @@ export default function ScanRedirect() {
       }}
     />
   );
+
+  const refreshPaper = async () => {
+    try {
+      const r = await paperAPI.scan(scannedRef);
+      const refreshed = r.data.paper;
+      setPaper(refreshed);
+      setRemark(refreshed?.logs?.[0]?.note === 'qr-auto-scan' ? '' : refreshed?.logs?.[0]?.note || '');
+    } catch (err) {
+      console.error('Failed to refresh scanned paper:', err);
+    }
+  };
+
+  const saveRemark = async () => {
+    if (!paper?.logs?.length) return;
+    const latestLog = paper.logs[0];
+    if (!latestLog?.id) return;
+    setSavingRemark(true);
+    setRemarkMsg('');
+    try {
+      await paperAPI.editLog(latestLog.id, { action: latestLog.action, person: latestLog.person || '', note: remark.trim() || 'manual' });
+      setRemarkMsg('Remarks saved.');
+      await refreshPaper();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to save remarks.');
+    } finally {
+      setSavingRemark(false);
+    }
+  };
 
   if (authLoading || loading) return (
     <div style={styles.bg}>
@@ -202,6 +234,29 @@ export default function ScanRedirect() {
           <div style={styles.row}>
             <span style={styles.label}>STATUS</span>
             <StatusBadge action={paper.status_action} dept={paper.status_dept} />
+          </div>
+        </div>
+
+        {/* Remarks */}
+        <div style={{ padding: '0 24px 12px', borderBottom: '1px solid #eee' }}>
+          <div style={{ marginBottom: 8, fontWeight: 600, color: '#323f4b' }}>Remarks</div>
+          <textarea
+            className="inp"
+            rows={4}
+            placeholder="Optional instructions, concerns, or notes for the next department."
+            value={remark}
+            onChange={e => setRemark(e.target.value)}
+            style={{ width: '100%', resize: 'vertical' }}
+          />
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, gap: 10 }}>
+            <button
+              className="btn btn-outline"
+              onClick={saveRemark}
+              disabled={savingRemark || !paper?.logs?.length}
+            >
+              {savingRemark ? 'Saving…' : 'Save Remark'}
+            </button>
+            {remarkMsg && <span style={{ color: '#1a7f4e' }}>{remarkMsg}</span>}
           </div>
         </div>
 
