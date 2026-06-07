@@ -7,6 +7,22 @@ cors();
 
 $action = $_GET['action'] ?? '';
 
+function normalizeMarkerRole($marker_role) {
+    if ($marker_role === null || $marker_role === '') return null;
+    if (!is_array($marker_role)) {
+        $marker_role = explode(',', (string)$marker_role);
+    }
+    $marker_role = array_values(array_filter(array_map(function($role) {
+        return trim(strtoupper((string)$role));
+    }, $marker_role)));
+    if (empty($marker_role)) return null;
+    $valid = ['IN', 'OUT'];
+    foreach ($marker_role as $role) {
+        if (!in_array($role, $valid, true)) return false;
+    }
+    return implode(',', array_unique($marker_role));
+}
+
 if ($action === 'list') {
     $db = getDB();
     $s = requireLogin();
@@ -36,12 +52,11 @@ elseif ($action === 'create') {
     $password = $b['password'] ?? '';
     $role     = $b['role'] ?? 'department';
     $dept_id  = $b['dept_id'] ? intval($b['dept_id']) : null;
-    $marker_role = $b['marker_role'] ?? null;
+    $marker_role = normalizeMarkerRole($b['marker_role'] ?? null);
 
+    if ($marker_role === false) err('Invalid marker role.');
     if (!$username || !$password) err('Username and password required.');
     if (strlen($password) < 6) err('Password must be at least 6 characters.');
-
-    if ($marker_role && !in_array($marker_role, ['IN', 'OUT'])) err('Invalid marker role.');
 
     if ($s['role'] === 'department') {
         if (!$s['dept_id']) err('Department not assigned.', 403);
@@ -70,10 +85,10 @@ elseif ($action === 'update') {
     $role     = $b['role'] ?? '';
     $dept_id  = $b['dept_id'] ? intval($b['dept_id']) : null;
     $password = $b['password'] ?? '';
-    $marker_role = $b['marker_role'] ?? null;
+    $marker_role = normalizeMarkerRole($b['marker_role'] ?? null);
     $telegram_chat_id = trim($b['telegram_chat_id'] ?? '');
 
-    if ($marker_role && !in_array($marker_role, ['IN', 'OUT'])) err('Invalid marker role.');
+    if ($marker_role === false) err('Invalid marker role.');
 
     $db = getDB();
     if ($s['role'] === 'department') {

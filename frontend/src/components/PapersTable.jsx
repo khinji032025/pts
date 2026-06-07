@@ -27,6 +27,17 @@ export default function PapersTable({ refresh }) {
 
   const isAdmin = user?.role === 'admin';
 
+  const normalizeMarkerRole = (raw) => {
+    if (!raw) return [];
+    if (Array.isArray(raw)) return raw.filter(Boolean);
+    return String(raw).split(',').map(r => r.trim()).filter(Boolean);
+  };
+
+  const hasMarkerRole = (action) => {
+    const roles = normalizeMarkerRole(user?.marker_role);
+    return roles.includes(action);
+  };
+
   const canMark = (paper, action) => {
     const status = paper.status_action || null;
     
@@ -40,11 +51,12 @@ export default function PapersTable({ refresh }) {
     
     // For department users, check marker_role restriction
     if (!isAdmin) {
-      if (!user?.marker_role) {
+      const roles = normalizeMarkerRole(user?.marker_role);
+      if (!roles.length) {
         return false;
       }
-      if ((user.marker_role === 'IN' && action === 'OUT') || (user.marker_role === 'OUT' && action === 'IN')) {
-        return false; // User doesn't have the correct role for this action
+      if (!roles.includes(action)) {
+        return false;
       }
     }
     
@@ -126,12 +138,13 @@ export default function PapersTable({ refresh }) {
   };
 
   const attemptMark = async (paper, action) => {
-    if (!isAdmin && !user?.marker_role) {
+    const roles = normalizeMarkerRole(user?.marker_role);
+    if (!isAdmin && !roles.length) {
       setMarkerRoleWarning({ markerRole: 'UNASSIGNED', attemptedAction: action });
       return;
     }
 
-    if (!isAdmin && ((user.marker_role === 'IN' && action === 'OUT') || (user.marker_role === 'OUT' && action === 'IN'))) {
+    if (!isAdmin && !roles.includes(action)) {
       setMarkerRoleWarning({ markerRole: user.marker_role, attemptedAction: action });
       return;
     }

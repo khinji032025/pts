@@ -8,10 +8,16 @@ export default function AdminUsers() {
   const [users, setUsers]   = useState([]);
   const [depts, setDepts]   = useState([]);
   const [loading, setLoading] = useState(true);
-  const [form, setForm]     = useState({ username:'', password:'', telegram_chat_id:'', role:'department', dept_id:'', marker_role:null });
+  const [form, setForm]     = useState({ username:'', password:'', telegram_chat_id:'', role:'department', dept_id:'', marker_role:[] });
   const [editing, setEditing] = useState(null);
   const [error, setError]   = useState('');
   const [ok, setOk]         = useState('');
+
+  const normalizeMarkerRole = (raw) => {
+    if (!raw) return [];
+    if (Array.isArray(raw)) return raw.filter(Boolean);
+    return String(raw).split(',').map(r => r.trim()).filter(Boolean);
+  };
 
   const load = async () => {
     setLoading(true);
@@ -33,7 +39,11 @@ export default function AdminUsers() {
   const create = async (e) => {
     e.preventDefault(); setError(''); setOk('');
     try {
-      const r = await userAPI.create(form);
+      const payload = {
+        ...form,
+        marker_role: normalizeMarkerRole(form.marker_role).join(',') || null,
+      };
+      const r = await userAPI.create(payload);
       const newId = r.data.id;
       if (me?.role === 'admin') {
         try {
@@ -47,7 +57,7 @@ export default function AdminUsers() {
           console.error('Admin activity log failed', logErr);
         }
       }
-      setForm({username:'',password:'',telegram_chat_id:'',role:'department',dept_id:'',marker_role:null});
+      setForm({username:'',password:'',telegram_chat_id:'',role:'department',dept_id:'',marker_role:[]});
       setOk('User created.');
       load();
     } catch (err) { setError(err.response?.data?.error || 'Failed.'); }
@@ -56,7 +66,11 @@ export default function AdminUsers() {
   const update = async (e) => {
     e.preventDefault(); setError(''); setOk('');
     try {
-      await userAPI.update(editing.id, editing);
+      const payload = {
+        ...editing,
+        marker_role: normalizeMarkerRole(editing.marker_role).join(',') || null,
+      };
+      await userAPI.update(editing.id, payload);
       if (me?.role === 'admin') {
         try {
           await authAPI.logAdminActivity({
@@ -107,6 +121,14 @@ export default function AdminUsers() {
   const F = editing ? editing : form;
   const setF = editing ? (fn => setEditing(u => fn(u))) : (fn => setForm(u => fn(u)));
 
+  const renderMarkerRoles = (raw) => {
+    const roles = normalizeMarkerRole(raw);
+    if (!roles.length) return <span className="muted">—</span>;
+    return roles.map(role => (
+      <span key={role} style={{ background:'var(--blue-bg)', color:'var(--blue)', padding:'2px 8px', borderRadius:'4px', fontSize:'11px', fontWeight:'600', marginRight: 4, display:'inline-block' }}>{role}</span>
+    ));
+  };
+
   return (
     <div className="g2 g2-admin" style={{ gap: 16 }}>
       <div className="card" style={{ alignSelf:'start', maxWidth: 380 }}>
@@ -139,9 +161,36 @@ export default function AdminUsers() {
                   </select></div>
                 <div className="fg" style={{ marginBottom: 12 }}><label className="lbl" style={{ fontSize: 13, marginBottom: 6 }}>Marker Role</label>
                   <div style={{ display: 'flex', gap: 8 }}>
-                    <button type="button" className={`btn btn-sm ${F.marker_role === 'IN' ? 'btn-navy' : 'btn-outline'}`} onClick={() => setF(f => ({ ...f, marker_role: F.marker_role === 'IN' ? null : 'IN' }))} style={{ flex: 1, fontSize: 13, padding: '8px 0' }}>↓ IN (Entry)</button>
-                    <button type="button" className={`btn btn-sm ${F.marker_role === 'OUT' ? 'btn-navy' : 'btn-outline'}`} onClick={() => setF(f => ({ ...f, marker_role: F.marker_role === 'OUT' ? null : 'OUT' }))} style={{ flex: 1, fontSize: 13, padding: '8px 0' }}>↑ OUT (Exit)</button>
-                  </div></div>
+                    {(() => {
+                      const markerRoles = normalizeMarkerRole(F.marker_role);
+                      return (
+                        <>
+                          <button
+                            type="button"
+                            className={`btn btn-sm ${markerRoles.includes('IN') ? 'btn-navy' : 'btn-outline'}`}
+                            onClick={() => setF(f => {
+                              const current = normalizeMarkerRole(f.marker_role);
+                              const next = current.includes('IN') ? current.filter(r => r !== 'IN') : [...current, 'IN'];
+                              return { ...f, marker_role: next };
+                            })}
+                            style={{ flex: 1, fontSize: 13, padding: '8px 0' }}
+                          >↓ IN (Entry)</button>
+                          <button
+                            type="button"
+                            className={`btn btn-sm ${markerRoles.includes('OUT') ? 'btn-navy' : 'btn-outline'}`}
+                            onClick={() => setF(f => {
+                              const current = normalizeMarkerRole(f.marker_role);
+                              const next = current.includes('OUT') ? current.filter(r => r !== 'OUT') : [...current, 'OUT'];
+                              return { ...f, marker_role: next };
+                            })}
+                            style={{ flex: 1, fontSize: 13, padding: '8px 0' }}
+                          >↑ OUT (Exit)</button>
+                        </>
+                      );
+                    })()}
+                  </div>
+                  <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>Select up to two roles only when necessary for backup or substitution purposes.</div>
+                </div>
               </>
             )}
             <button type="submit" className="btn btn-navy btn-full" style={{ padding: '10px 0', fontSize: 14 }}>{editing ? 'Save Changes' : 'Create User'}</button>
@@ -165,10 +214,10 @@ export default function AdminUsers() {
                     <td style={{fontWeight:500, padding: '10px 8px'}}>{u.username}</td>
                     <td style={{ padding: '10px 8px' }}><span className={`badge ${u.role==='admin' ? 'b-admin' : u.role==='department' ? 'b-dept' : 'b-none'}`} style={{ fontSize: 12, padding: '2px 8px' }}>{u.role}</span></td>
                     <td className="muted" style={{ padding: '10px 8px' }}>{u.dept_name||'—'}</td>
-                    <td style={{ padding: '10px 8px' }}>{u.marker_role ? <span style={{background:'var(--blue-bg)',color:'var(--blue)',padding:'2px 8px',borderRadius:'4px',fontSize:'11px',fontWeight:'600'}}>{u.marker_role}</span> : <span className="muted">—</span>}</td>
+                    <td style={{ padding: '10px 8px' }}>{renderMarkerRoles(u.marker_role)}</td>
                     <td style={{textAlign:'right', padding: '10px 8px'}}>
                       <div className="row" style={{justifyContent:'flex-end',gap:4}}>
-                        <button className="btn btn-outline btn-sm" style={{ fontSize: 12, padding: '6px 10px' }} onClick={() => { setEditing({ ...u, dept_id: u.department_id || '', telegram_chat_id: u.telegram_chat_id || '', password: '' }); setError(''); setOk(''); }}>Edit</button>
+                        <button className="btn btn-outline btn-sm" style={{ fontSize: 12, padding: '6px 10px' }} onClick={() => { setEditing({ ...u, dept_id: u.department_id || '', telegram_chat_id: u.telegram_chat_id || '', password: '', marker_role: normalizeMarkerRole(u.marker_role) }); setError(''); setOk(''); }}>Edit</button>
                         {u.id !== me?.id && <button className="btn btn-red btn-sm" style={{ fontSize: 12, padding: '6px 10px' }} onClick={() => del(u)}>Delete</button>}
                       </div>
                     </td>

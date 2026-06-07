@@ -5,10 +5,24 @@ import DeleteConfirmModal from './DeleteConfirmModal';
 export default function DepartmentUsersModal({ dept_id, dept_name, onClose }) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState({ username: '', password: '', telegram_chat_id: '', marker_role: null });
+  const [form, setForm] = useState({ username: '', password: '', telegram_chat_id: '', marker_role: [] });
   const [editing, setEditing] = useState(null);
   const [error, setError] = useState('');
   const [ok, setOk] = useState('');
+
+  const normalizeMarkerRole = (raw) => {
+    if (!raw) return [];
+    if (Array.isArray(raw)) return raw.filter(Boolean);
+    return String(raw).split(',').map(r => r.trim()).filter(Boolean);
+  };
+
+  const renderMarkerRoles = (raw) => {
+    const roles = normalizeMarkerRole(raw);
+    if (!roles.length) return <span className="muted">—</span>;
+    return roles.map(role => (
+      <span key={role} style={{ background:'var(--blue-bg)', color:'var(--blue)', padding:'2px 8px', borderRadius:'4px', fontSize:'11px', fontWeight:'600', marginRight: 4, display:'inline-block' }}>{role}</span>
+    ));
+  };
 
   const load = async () => {
     setLoading(true);
@@ -40,7 +54,7 @@ export default function DepartmentUsersModal({ dept_id, dept_name, onClose }) {
   }, [dept_id]);
 
   const resetForm = () => {
-    setForm({ username: '', password: '', telegram_chat_id: '', marker_role: null });
+    setForm({ username: '', password: '', telegram_chat_id: '', marker_role: [] });
     setEditing(null);
   };
 
@@ -50,10 +64,26 @@ export default function DepartmentUsersModal({ dept_id, dept_name, onClose }) {
     setOk('');
     try {
       if (editing) {
-        await userAPI.update(editing.id, { ...editing, role: 'department', dept_id, password: editing.password || '', marker_role: editing.marker_role || null, telegram_chat_id: editing.telegram_chat_id || '' });
+        const payload = {
+          ...editing,
+          role: 'department',
+          dept_id,
+          password: editing.password || '',
+          marker_role: normalizeMarkerRole(editing.marker_role).join(',') || null,
+          telegram_chat_id: editing.telegram_chat_id || ''
+        };
+        await userAPI.update(editing.id, payload);
         setOk('User updated.');
       } else {
-        await userAPI.create({ username: form.username, password: form.password, role: 'department', dept_id, marker_role: form.marker_role || null, telegram_chat_id: form.telegram_chat_id || '' });
+        const payload = {
+          username: form.username,
+          password: form.password,
+          role: 'department',
+          dept_id,
+          marker_role: normalizeMarkerRole(form.marker_role).join(',') || null,
+          telegram_chat_id: form.telegram_chat_id || ''
+        };
+        await userAPI.create(payload);
         setOk('User created.');
       }
       resetForm();
@@ -131,35 +161,55 @@ export default function DepartmentUsersModal({ dept_id, dept_name, onClose }) {
                 <div className="fg">
                   <label className="lbl">Marker Role</label>
                   <div style={{ display: 'flex', gap: 8 }}>
-                    <button 
-                      type="button" 
-                      className={`btn btn-sm ${(editing ? editing.marker_role : form.marker_role) === 'IN' ? 'btn-navy' : 'btn-outline'}`} 
-                      onClick={() => {
-                        const currentRole = editing ? editing.marker_role : form.marker_role;
-                        const newRole = currentRole === 'IN' ? null : 'IN';
-                        if (editing) {
-                          setEditing(v => ({ ...v, marker_role: newRole }));
-                        } else {
-                          setForm(v => ({ ...v, marker_role: newRole }));
-                        }
-                      }}
-                      style={{ flex: 1 }}
-                    >↓ IN (Entry)</button>
-                    <button 
-                      type="button" 
-                      className={`btn btn-sm ${(editing ? editing.marker_role : form.marker_role) === 'OUT' ? 'btn-navy' : 'btn-outline'}`} 
-                      onClick={() => {
-                        const currentRole = editing ? editing.marker_role : form.marker_role;
-                        const newRole = currentRole === 'OUT' ? null : 'OUT';
-                        if (editing) {
-                          setEditing(v => ({ ...v, marker_role: newRole }));
-                        } else {
-                          setForm(v => ({ ...v, marker_role: newRole }));
-                        }
-                      }}
-                      style={{ flex: 1 }}
-                    >↑ OUT (Exit)</button>
+                    {(() => {
+                      const roles = normalizeMarkerRole(editing ? editing.marker_role : form.marker_role);
+                      return (
+                        <>
+                          <button
+                            type="button"
+                            className={`btn btn-sm ${roles.includes('IN') ? 'btn-navy' : 'btn-outline'}`}
+                            onClick={() => {
+                              if (editing) {
+                                setEditing(v => {
+                                  const current = normalizeMarkerRole(v.marker_role);
+                                  const next = current.includes('IN') ? current.filter(r => r !== 'IN') : [...current, 'IN'];
+                                  return { ...v, marker_role: next };
+                                });
+                              } else {
+                                setForm(v => {
+                                  const current = normalizeMarkerRole(v.marker_role);
+                                  const next = current.includes('IN') ? current.filter(r => r !== 'IN') : [...current, 'IN'];
+                                  return { ...v, marker_role: next };
+                                });
+                              }
+                            }}
+                            style={{ flex: 1 }}
+                          >↓ IN (Entry)</button>
+                          <button
+                            type="button"
+                            className={`btn btn-sm ${roles.includes('OUT') ? 'btn-navy' : 'btn-outline'}`}
+                            onClick={() => {
+                              if (editing) {
+                                setEditing(v => {
+                                  const current = normalizeMarkerRole(v.marker_role);
+                                  const next = current.includes('OUT') ? current.filter(r => r !== 'OUT') : [...current, 'OUT'];
+                                  return { ...v, marker_role: next };
+                                });
+                              } else {
+                                setForm(v => {
+                                  const current = normalizeMarkerRole(v.marker_role);
+                                  const next = current.includes('OUT') ? current.filter(r => r !== 'OUT') : [...current, 'OUT'];
+                                  return { ...v, marker_role: next };
+                                });
+                              }
+                            }}
+                            style={{ flex: 1 }}
+                          >↑ OUT (Exit)</button>
+                        </>
+                      );
+                    })()}
                   </div>
+                  <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>Select up to two roles only when necessary for backup or substitution purposes.</div>
                 </div>
                 <button type="submit" className="btn btn-navy btn-full">{editing ? 'Save Changes' : 'Create User'}</button>
               </div>
@@ -180,10 +230,10 @@ export default function DepartmentUsersModal({ dept_id, dept_name, onClose }) {
                       {users.map(u => (
                         <tr key={u.id}>
                           <td style={{ fontWeight: 500 }}>{u.username}</td>
-                          <td>{u.marker_role ? <span style={{background:'var(--blue-bg)',color:'var(--blue)',padding:'2px 8px',borderRadius:'4px',fontSize:'11px',fontWeight:'600'}}>{u.marker_role}</span> : <span className="muted">—</span>}</td>
+                          <td>{renderMarkerRoles(u.marker_role)}</td>
                           <td style={{ textAlign: 'right' }}>
                             <div className="row" style={{ justifyContent: 'flex-end', gap: 4 }}>
-                              <button type="button" className="btn btn-outline btn-sm" onClick={() => { setEditing({ ...u, password: '' }); setError(''); setOk(''); }}>Edit</button>
+                              <button type="button" className="btn btn-outline btn-sm" onClick={() => { setEditing({ ...u, password: '', marker_role: normalizeMarkerRole(u.marker_role) }); setError(''); setOk(''); }}>Edit</button>
                               <button type="button" className="btn btn-red btn-sm" onClick={() => del(u)}>Delete</button>
                             </div>
                           </td>

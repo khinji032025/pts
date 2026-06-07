@@ -28,6 +28,13 @@ function currentStatus($db, $paper_id) {
     return $st->get_result()->fetch_assoc();
 }
 
+function markerRoleIncludes($marker_role, $action) {
+    $marker_role = strtoupper(trim((string)$marker_role));
+    if ($marker_role === '') return false;
+    $roles = array_filter(array_map('trim', explode(',', $marker_role)));
+    return in_array($action, $roles, true);
+}
+
 function notifyUsers($db, $paper_id, $user_ids) {
     $user_ids = array_values(array_unique(array_filter($user_ids, 'intval')));
     if (!$user_ids) return;
@@ -481,7 +488,7 @@ elseif ($action === 'mark') {
         }
 
         $markerRole = $userMarkerRole['marker_role'];
-        if (($markerRole === 'IN' && $act === 'OUT') || ($markerRole === 'OUT' && $act === 'IN')) {
+        if (!markerRoleIncludes($markerRole, $act)) {
             err("You are assigned to mark papers as '{$markerRole}', but you are trying to mark as '{$act}'", 403);
         }
     }
@@ -813,7 +820,7 @@ elseif ($action === 'scan') {
             }
 
             $markerRole = $userMarkerRole['marker_role'];
-            if (($markerRole === 'IN' && $nextAction === 'OUT') || ($markerRole === 'OUT' && $nextAction === 'IN')) {
+            if (!markerRoleIncludes($markerRole, $nextAction)) {
                 err("You are assigned to mark papers as '{$markerRole}', but scanning this paper would mark it as '{$nextAction}'", 403);
             }
         }

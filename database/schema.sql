@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS users (
     password VARCHAR(255) NOT NULL,
     role ENUM('admin','department','pending') NOT NULL DEFAULT 'pending',
     department_id INT NULL,
-    marker_role ENUM('IN','OUT') DEFAULT NULL,
+    marker_role SET('IN','OUT') DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE SET NULL
 );
