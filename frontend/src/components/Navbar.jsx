@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import ChangePasswordModal from './ChangePasswordModal';
 import ScanModal from './ScanModal';
@@ -88,6 +88,8 @@ export default function Navbar({ title, sub, greeting, notifCount = 0, recentPap
     nav('/login');
   };
 
+  const homePath = user ? (user.role === 'admin' ? '/admin' : '/dept') : '/';
+
   const openNotification = (paper) => {
     setShowNotifMenu(false);
     if (onNotificationOpen) onNotificationOpen();
@@ -97,7 +99,7 @@ export default function Navbar({ title, sub, greeting, notifCount = 0, recentPap
   return (
     <>
       <nav className="navbar">
-        <div className="nb-brand">
+        <Link to={homePath} className="nb-brand nb-brand-link">
           <img src="/logo-dashboard.png" alt="Logo" style={{ width:34, height:34, borderRadius:'50%', objectFit:'cover' }} />
           <div>
             <span className="nb-title">{title || 'QR Office'}</span>
@@ -105,7 +107,7 @@ export default function Navbar({ title, sub, greeting, notifCount = 0, recentPap
             <span className="nb-meta">{formattedTime}</span>
             {!greeting && sub && <span className="nb-sub">{sub}</span>}
           </div>
-        </div>
+        </Link>
         <div className="nb-actions" ref={notifRef} style={{ position: 'relative' }}>
           {showNotifications && (
             <button className="btn btn-ghost btn-sm" type="button" onClick={() => setShowNotifMenu(v => !v)} style={{ position: 'relative' }}>
