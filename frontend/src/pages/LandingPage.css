@@ -317,6 +317,35 @@
   border: 0;
 }
 
+/* About Developers Button */
+.about-developers-btn {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  z-index: 100;
+  padding: 8px 18px;
+  background: linear-gradient(135deg, #c9a84c 0%, #e2be78 100%);
+  color: #0d1b35;
+  border: 1px solid rgba(226, 190, 120, 0.5);
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 6px 18px rgba(201, 168, 76, 0.25);
+  backdrop-filter: blur(10px);
+}
+
+.about-developers-btn:hover {
+  transform: translateY(-4px) scale(1.05);
+  box-shadow: 0 12px 32px rgba(201, 168, 76, 0.4);
+  background: linear-gradient(135deg, #e2be78 0%, #f5d699 100%);
+}
+
+.about-developers-btn:active {
+  transform: translateY(-2px) scale(1.02);
+}
+
 @media (max-width: 768px) {
   .landing-header { padding: 14px 16px; }
   .landing-logo { width: 40px; height: 40px; }
@@ -334,4 +363,5 @@
   .search-input { width: 100%; padding: 10px 12px; border: 1px solid rgba(13,27,53,0.12); border-radius: 10px; }
   .landing-stats { gap: 20px; }
   .landing-features { gap: 8px; }
+  .about-developers-btn { bottom: 16px; right: 16px; padding: 10px 20px; font-size: 13px; }
 }

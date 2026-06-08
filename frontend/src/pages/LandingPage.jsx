@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import LoginModal from '../components/LoginModal';
 import ScanModal from '../components/ScanModal';
+import AboutDevelopersModal from '../components/AboutDevelopersModal';
 import './LandingPage.css';
 
 export default function LandingPage() {
@@ -11,6 +12,7 @@ export default function LandingPage() {
   const [warning, setWarning] = useState('');
   const [showLogin, setShowLogin] = useState(false);
   const [showQR, setShowQR] = useState(false);
+  const [showAboutDevelopers, setShowAboutDevelopers] = useState(false);
   const [isDesktop, setIsDesktop] = useState(true);
 
   useEffect(() => {
@@ -107,6 +109,16 @@ export default function LandingPage() {
 
       {showLogin && <LoginModal onClose={() => setShowLogin(false)} />}
       {showQR && <ScanModal onClose={() => setShowQR(false)} />}
+      {showAboutDevelopers && <AboutDevelopersModal isOpen={showAboutDevelopers} onClose={() => setShowAboutDevelopers(false)} />}
+
+      <button
+        type="button"
+        className="about-developers-btn"
+        onClick={() => setShowAboutDevelopers(true)}
+        title="Learn about our development team"
+      >
+        About Developers
+      </button>
     </div>
   );
 }
