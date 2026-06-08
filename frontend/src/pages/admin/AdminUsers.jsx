@@ -8,7 +8,7 @@ export default function AdminUsers() {
   const [users, setUsers]   = useState([]);
   const [depts, setDepts]   = useState([]);
   const [loading, setLoading] = useState(true);
-  const [form, setForm]     = useState({ username:'', password:'', telegram_chat_id:'', role:'department', dept_id:'', marker_role:[] });
+  const [form, setForm]     = useState({ username:'', password:'', telegram_chat_id:'', role:'', dept_id:'', marker_role:[] });
   const [editing, setEditing] = useState(null);
   const [error, setError]   = useState('');
   const [ok, setOk]         = useState('');
@@ -57,7 +57,7 @@ export default function AdminUsers() {
           console.error('Admin activity log failed', logErr);
         }
       }
-      setForm({username:'',password:'',telegram_chat_id:'',role:'department',dept_id:'',marker_role:[]});
+      setForm({username:'',password:'',telegram_chat_id:'',role:'',dept_id:'',marker_role:[]});
       setOk('User created.');
       load();
     } catch (err) { setError(err.response?.data?.error || 'Failed.'); }
@@ -147,7 +147,8 @@ export default function AdminUsers() {
             <div className="fg" style={{ marginBottom: 12 }}><label className="lbl" style={{ fontSize: 13, marginBottom: 6 }}>Telegram Chat ID <span className="muted" style={{ fontSize: 12 }}>(optional)</span></label>
               <input className="inp" style={{ fontSize: 13, padding: '9px 12px' }} placeholder="e.g., 123456789" value={F.telegram_chat_id||''} onChange={e=>setF(f=>({...f,telegram_chat_id:e.target.value}))} /></div>
             <div className="fg" style={{ marginBottom: 12 }}><label className="lbl" style={{ fontSize: 13, marginBottom: 6 }}>Role</label>
-              <select className="sel" style={{ fontSize: 13, padding: '9px 12px' }} value={F.role} onChange={e=>setF(f=>({...f,role:e.target.value}))}>
+              <select className="sel" style={{ fontSize: 13, padding: '9px 12px' }} value={F.role} required onChange={e=>setF(f=>({...f,role:e.target.value}))}>
+                <option value="" disabled>-- None --</option>
                 {F.role === 'pending' && <option value="pending">Pending</option>}
                 <option value="department">Department</option>
                 <option value="admin">Admin</option>
