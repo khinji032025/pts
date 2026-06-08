@@ -46,9 +46,9 @@ export default function LandingPage() {
     <div className="landing-page">
       <header className="landing-header">
         <div className="landing-brand">
-          <img src="/logo-dashboard.png" alt="Paper Tracking System" className="landing-logo" />
+          <img src="/logo-dashboard.png" alt="Calape Document Tracking System" className="landing-logo" />
           <div>
-            <div className="landing-brand-name">Paper Tracking System</div>
+            <div className="landing-brand-name">Calape Document Tracking System</div>
             <div className="landing-brand-sub">Municipality of Calape</div>
           </div>
         </div>

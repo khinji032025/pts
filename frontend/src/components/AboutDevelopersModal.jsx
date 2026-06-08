@@ -70,7 +70,7 @@ export default function AboutDevelopersModal({ isOpen, onClose }) {
         <div className="about-modal-header">
           <img src="/logo-dashboard.png" alt="Calape Logo" className="about-modal-logo" />
           <div className="about-modal-header-text">
-            <h2 className="about-modal-title">Calape Paper Tracking System</h2>
+            <h2 className="about-modal-title">Calape Document Tracking System</h2>
             <p className="about-modal-subtitle">BISU Calape</p>
             <p className="about-modal-description">OJT Project Development</p>
           </div>
