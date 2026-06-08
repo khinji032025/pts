@@ -647,6 +647,87 @@ elseif ($action === 'undo_mark') {
     ok(['message' => "Status reverted to $action_val"]);
 }
 
+elseif ($action === 'return') {
+    $s = requireLogin();
+    $b = body();
+    $paper_id = intval($b['paper_id'] ?? 0);
+    $dept_id = intval($b['dept_id'] ?? $s['dept_id'] ?? 0);
+    $returnReason = trim($b['note'] ?? '');
+
+    if (!$paper_id) err('Paper ID required.');
+    if (!$returnReason) err('Reason for return is required.');
+
+    $db = getDB();
+    $isAdmin = $s['role'] === 'admin';
+
+    // Get current paper status
+    $paperRow = $db->prepare("SELECT origin_department_id FROM papers WHERE id=?");
+    $paperRow->bind_param('i', $paper_id);
+    $paperRow->execute();
+    $paper = $paperRow->get_result()->fetch_assoc();
+    $paperRow->close();
+    if (!$paper) err('Paper not found.', 404);
+
+    $originDept = intval($paper['origin_department_id'] ?? 0);
+    $actorDept = intval($s['dept_id'] ?? 0);
+
+    // Get current status
+    $current = currentStatus($db, $paper_id);
+    $currentAction = $current['action'] ?? null;
+    $currentDeptId = intval($current['department_id'] ?? 0);
+
+    // Validate: document must be in IN or OUT status
+    if (!in_array($currentAction, ['IN', 'OUT'])) {
+        err('Document can only be returned from IN or OUT status.', 400);
+    }
+
+    // For non-admin users: must have IN marker role and must be the department currently holding the document
+    if (!$isAdmin) {
+        // Check marker role
+        $userRow = $db->prepare("SELECT marker_role FROM users WHERE id=?");
+        $userRow->bind_param('i', $s['uid']);
+        $userRow->execute();
+        $userMarkerRole = $userRow->get_result()->fetch_assoc();
+        $userRow->close();
+
+        if (empty($userMarkerRole['marker_role']) || !markerRoleIncludes($userMarkerRole['marker_role'], 'IN')) {
+            err('Only users with IN marker role can return documents.', 403);
+        }
+
+        // Check that user's department is currently holding the document
+        if ($actorDept !== $currentDeptId) {
+            err('Forbidden. Your department is not currently holding this document.', 403);
+        }
+    }
+
+    // Create RETURNED status log entry with the reason in the note.
+    // Returned documents are sent back to the origin department.
+    $person = $s['username'];
+    $returnAction = 'RETURNED';
+    $note = $returnReason;
+    $returnDeptId = $originDept;
+
+    $ins = $db->prepare("INSERT INTO status_logs (paper_id,action,department_id,user_id,person,note) VALUES (?,?,?,?,?,?)");
+    $ins->bind_param('isiiss', $paper_id, $returnAction, $returnDeptId, $s['uid'], $person, $note);
+    if (!$ins->execute()) {
+        err('Failed to record return action.');
+    }
+
+    // Notify relevant users about the return
+    try {
+        $actor_uid = intval($s['uid']);
+        $actor_dept_id = intval($s['dept_id'] ?? 0);
+        $notifyIds = getNotificationRecipients($db, $paper_id, $actor_uid, $actor_dept_id, 'RETURNED');
+        if (!empty($notifyIds)) notifyUsers($db, $paper_id, $notifyIds);
+    } catch (Exception $e) {}
+
+    if ($isAdmin) {
+        logAdminActivity($db, $s, 'Return Paper', 'paper', $paper_id, "Returned document: {$returnReason}");
+    }
+
+    ok(['message' => 'Document returned successfully']);
+}
+
 elseif ($action === 'upload_image') {
     $s = requireLogin();
     $paper_id = intval($_POST['paper_id'] ?? 0);
@@ -792,8 +873,7 @@ elseif ($action === 'scan') {
         }
 
         if (!$isAdmin) {
-            // For new papers (no status yet), any department can scan (marker role check below will validate)
-            // For papers already marked IN, only the current holder can scan to mark OUT
+            // For new papers (no status yet), any department can scan (marker role check below will validate).
             if ($currentAction === 'IN' && $actorDeptName !== $currentDeptName) {
                 err('Forbidden.', 403);
             }
@@ -803,9 +883,19 @@ elseif ($action === 'scan') {
                     err('Forbidden.', 403);
                 }
             }
+
+            if ($currentAction === 'RETURNED' && $actorDeptName !== $currentDeptName) {
+                err('Forbidden.', 403);
+            }
         }
 
-        $nextAction = $currentAction === 'IN' ? 'OUT' : 'IN';
+        if ($currentAction === 'IN') {
+            $nextAction = 'OUT';
+        } elseif ($currentAction === 'RETURNED') {
+            $nextAction = 'IN';
+        } else {
+            $nextAction = 'IN';
+        }
 
         // Check marker role restriction for non-admin department users (for auto-scan)
         if (!$isAdmin && $s['role'] === 'department') {

@@ -201,6 +201,7 @@ td { padding:11px 14px; vertical-align:middle; text-align:center; }
 .badge { display:inline-flex; align-items:center; padding:2px 9px; border-radius:20px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; }
 .b-in    { background:var(--green-bg); color:var(--green); }
 .b-out   { background:var(--amber-bg); color:var(--amber); }
+.b-returned { background:#fef3c7; color:#d97706; }
 .b-done  { background:var(--blue-bg);  color:var(--blue);  }
 .b-none  { background:var(--ivory2);   color:var(--t3);    }
 .b-admin { background:var(--navy);     color:var(--gold2); }

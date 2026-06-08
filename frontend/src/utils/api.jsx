@@ -42,9 +42,11 @@ export const paperAPI = {
   mark:        (d)      => api.post('/papers.php?action=mark', d),
   editLog:     (id, d)  => api.put(`/papers.php?action=edit_log&id=${id}`, d),
   undoMark:    (paper_id, note) => api.post(`/papers.php?action=undo_mark&paper_id=${paper_id}`, { note }),
+  returnPaper: (d)      => api.post('/papers.php?action=return', d),
   deleteImage: (id)     => api.delete(`/papers.php?action=delete_image&id=${id}`),
   scan:        (ref, params = {}) => api.get('/papers.php?action=scan', { params: { ref, ...params } }),
   uploadImage: (fd)     => api.post('/papers.php?action=upload_image', fd, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  request:     (action, d) => api.post(`/papers.php?action=${action}`, d),
 };
 
 export const notificationsAPI = {

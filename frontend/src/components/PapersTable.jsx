@@ -7,6 +7,7 @@ import QRCode from './QRCode';
 import Barcode from './Barcode';
 import MarkerRoleWarningModal from './MarkerRoleWarningModal';
 import DeleteConfirmModal from './DeleteConfirmModal';
+import ReturnConfirmModal from './ReturnConfirmModal';
 
 const MONTHS = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
@@ -24,6 +25,9 @@ export default function PapersTable({ refresh }) {
   const [markerRoleWarning, setMarkerRoleWarning] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [returnTarget, setReturnTarget] = useState(null);
+  const [returnNote, setReturnNote] = useState('');
+  const [returningPaper, setReturningPaper] = useState(false);
 
   const isAdmin = user?.role === 'admin';
 
@@ -65,6 +69,21 @@ export default function PapersTable({ refresh }) {
     if (action === 'OUT') return status === 'IN';
     if (action === 'DONE') return !!status && status !== 'DONE';
     return false;
+  };
+
+  const canReturn = (paper) => {
+    const status = paper.status_action || null;
+    // Can only return papers that are in IN or OUT status
+    if (status !== 'IN' && status !== 'OUT') return false;
+    
+    // Only users with IN marker role can return documents
+    const roles = normalizeMarkerRole(user?.marker_role);
+    if (!isAdmin && !roles.includes('IN')) return false;
+    
+    // User's department must be the one currently holding the document
+    if (!isAdmin && user?.dept_name !== paper.status_dept) return false;
+    
+    return true;
   };
 
   const warningFor = (paper, action) => {
@@ -183,8 +202,41 @@ export default function PapersTable({ refresh }) {
 
   const cancelDelete = () => setDeleteTarget(null);
 
+  const initiateReturn = (paper) => {
+    setReturnTarget(paper);
+    setReturnNote('');
+  };
+
+  const confirmReturn = async () => {
+    if (!returnTarget || !returnNote.trim()) return;
+    setReturningPaper(true);
+    try {
+      await paperAPI.returnPaper({ 
+        paper_id: returnTarget.id, 
+        dept_id: user.dept_id, 
+        note: returnNote.trim() 
+      });
+      setMsg(`Document returned — Ref #${returnTarget.ref_code}`);
+      setReturnTarget(null);
+      setReturnNote('');
+      load(active);
+      setTimeout(() => setMsg(''), 3000);
+    } catch (err) {
+      const errorMsg = err.response?.data?.error || 'Failed to return document';
+      setMsg('Error: ' + errorMsg);
+      setTimeout(() => setMsg(''), 3500);
+    } finally {
+      setReturningPaper(false);
+    }
+  };
+
+  const cancelReturn = () => {
+    setReturnTarget(null);
+    setReturnNote('');
+  };
+
   const renderMobileActions = (paper) => {
-    const showDeptActions = !isAdmin && (user?.dept_name === paper.origin || (paper.status_action === 'IN' && paper.status_dept === user?.dept_name));
+    const showDeptActions = !isAdmin && (user?.dept_name === paper.origin || ((paper.status_action === 'IN' || paper.status_action === 'OUT') && paper.status_dept === user?.dept_name));
 
     return (
       <div className="paper-actions-dropdown">
@@ -217,6 +269,17 @@ export default function PapersTable({ refresh }) {
             >
               ✓ Done
             </button>
+            {showDeptActions && (
+              <button 
+                type="button" 
+                className="paper-actions-item" 
+                style={{ color: '#d97706', borderColor: '#d97706' }}
+                onClick={() => { closeActionMenu(); initiateReturn(paper); }} 
+                disabled={!canReturn(paper)}
+              >
+                ↶ Return
+              </button>
+            )}
             {(isAdmin || user?.dept_id === paper.origin_department_id) && (
               <button type="button" className="paper-actions-item paper-actions-danger" onClick={() => { closeActionMenu(); del(paper); }}>Delete</button>
             )}
@@ -415,6 +478,15 @@ export default function PapersTable({ refresh }) {
                                     style={{ opacity: canMark(p, 'OUT') ? 1 : 0.45, cursor: canMark(p, 'OUT') ? 'pointer' : 'not-allowed' }}
                                   >↑ Mark OUT</button>
                                 )}
+                                {isAdmin && (
+                                  <button 
+                                    className="btn btn-sm" 
+                                    style={{backgroundColor:'#d97706', color:'#fff', border:'none', opacity: canReturn(p) ? 1 : 0.45, cursor: canReturn(p) ? 'pointer' : 'not-allowed'}}
+                                    onClick={() => initiateReturn(p)}
+                                  >
+                                    ↶ Return
+                                  </button>
+                                )}
                               </div>
                               {isAdmin && <button className="btn btn-red btn-sm" onClick={() => del(p)}>Delete</button>}
                             </div>
@@ -441,6 +513,15 @@ export default function PapersTable({ refresh }) {
                                   >↑ Mark OUT</button>
                                 )}
                               </div>
+                              {!isAdmin && (user?.dept_name === p.origin || (p.status_action === 'IN' && p.status_dept === user?.dept_name)) && (
+                                <button 
+                                  className="btn btn-sm" 
+                                  style={{backgroundColor:'#d97706', color:'#fff', border:'none', opacity: canReturn(p) ? 1 : 0.45, cursor: canReturn(p) ? 'pointer' : 'not-allowed'}}
+                                  onClick={() => initiateReturn(p)}
+                                >
+                                  ↶ Return
+                                </button>
+                              )}
                             </div>
                             <div className="row" style={{ justifyContent:'center', gap:4 }}>
                               <button className="btn btn-outline btn-sm" style={{color:'var(--t1)', border:'1.5px solid var(--border2)'}} onClick={() => print(p)}>🖨️ Print</button>
@@ -478,6 +559,16 @@ export default function PapersTable({ refresh }) {
       )}
       {deleteTarget && (
         <DeleteConfirmModal open={!!deleteTarget} refCode={deleteTarget.ref_code} onCancel={cancelDelete} onConfirm={confirmDelete} />
+      )}
+      {returnTarget && (
+        <ReturnConfirmModal 
+          open={!!returnTarget} 
+          onCancel={cancelReturn} 
+          onConfirm={confirmReturn}
+          note={returnNote}
+          onNoteChange={setReturnNote}
+          loading={returningPaper}
+        />
       )}
     </div>
   );

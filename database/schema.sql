@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS papers (
 CREATE TABLE IF NOT EXISTS status_logs (
     id INT AUTO_INCREMENT PRIMARY KEY,
     paper_id INT NOT NULL,
-    action ENUM('IN','OUT','DONE') NOT NULL,
+    action ENUM('IN','OUT','DONE','RETURNED') NOT NULL,
     department_id INT NOT NULL,
     user_id INT NOT NULL,
     person VARCHAR(100),
