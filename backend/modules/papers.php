@@ -50,18 +50,22 @@ function notifyUsers($db, $paper_id, $user_ids) {
     }
 
     // Build message text from current paper status
-    $st = $db->prepare("SELECT ref_code FROM papers WHERE id=?");
+    $st = $db->prepare("SELECT ref_code, title FROM papers WHERE id=?");
     if (!$st) return;
     $st->bind_param('i', $paper_id);
     $st->execute();
     $prow = $st->get_result()->fetch_assoc();
     $st->close();
     $ref_code = $prow['ref_code'] ?? ($paper_id ? "#{$paper_id}" : 'unknown');
+    $title = trim($prow['title'] ?? '');
+    $escTitle = $title !== '' ? htmlspecialchars($title, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') : '';
     $status = currentStatus($db, $paper_id);
     $action = $status['action'] ?? 'updated';
     $dept = $status['dept'] ?? null;
-    $textBase = "Paper {$ref_code} has a new notification: {$action}";
-    if ($dept) $textBase .= " at {$dept}";
+    $textBase = "Paper {$ref_code}";
+    if ($escTitle) $textBase .= " - {$escTitle}";
+    $textBase .= " has a new notification: {$action}";
+    if ($dept) $textBase .= " at " . htmlspecialchars($dept, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 
     // Send per-user Telegram messages (use user's telegram_chat_id if present)
     $idList = implode(',', array_map('intval', $user_ids));
