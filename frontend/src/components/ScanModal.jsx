@@ -1,10 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { paperAPI, deptAPI } from '../utils/api';
+import { useAuth } from '../context/AuthContext';
 import StatusBadge from './StatusBadge';
+import MarkerRoleWarningModal from './MarkerRoleWarningModal';
 
 export default function ScanModal({ onClose, markMode = false }) {
   const nav = useNavigate();
+  const { user } = useAuth();
   const [tab, setTab]       = useState('camera');
   const [ref, setRef]       = useState('');
   const [error, setError]   = useState('');
@@ -12,6 +15,7 @@ export default function ScanModal({ onClose, markMode = false }) {
   const [department, setDepartment] = useState(null);
   const [departmentPapers, setDepartmentPapers] = useState(null);
   const [departmentError, setDepartmentError] = useState('');
+  const [markerRoleWarning, setMarkerRoleWarning] = useState(null);
   const [screenWidth, setScreenWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
   const [camError, setCamError] = useState('');
   const [scanning, setScanning] = useState(false);
@@ -39,7 +43,11 @@ export default function ScanModal({ onClose, markMode = false }) {
     try {
       const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
       streamRef.current = s;
-      if (videoRef.current) videoRef.current.srcObject = s;
+      if (videoRef.current) {
+        videoRef.current.srcObject = s;
+        videoRef.current.muted = true;
+        videoRef.current.play().catch(() => {});
+      }
 
       const Detector = window.BarcodeDetector;
       let useJSQR = false;
@@ -122,26 +130,6 @@ export default function ScanModal({ onClose, markMode = false }) {
         return null;
       };
 
-      const clearDepartmentResults = () => {
-        setDepartment(null);
-        setDepartmentPapers(null);
-        setDepartmentError('');
-      };
-
-      const loadDepartmentPapers = async (dept_id) => {
-        setDepartmentError('');
-        setDepartment(null);
-        setDepartmentPapers(null);
-        try {
-          const r = await deptAPI.papers(dept_id);
-          setDepartment(r.data.department);
-          setDepartmentPapers(r.data.papers || []);
-          return true;
-        } catch (err) {
-          setDepartmentError(err.response?.data?.error || 'Department not found.');
-          return false;
-        }
-      };
 
       const handleDetectedRef = async (detectedRef) => {
         if (detectLockRef.current) return;
@@ -159,20 +147,52 @@ export default function ScanModal({ onClose, markMode = false }) {
           if (departmentFound) return;
         }
 
+        let preview = null;
+        if (markMode) {
+          try {
+            const previewResp = await paperAPI.publicView(detectedRef);
+            preview = previewResp.data.paper;
+          } catch {
+            preview = null;
+          }
+        }
+
+        if (preview) {
+          const current = preview;
+          const isAdmin = user?.role === 'admin';
+          const isCurrentDept = user?.dept_name && current.status_dept && user.dept_name === current.status_dept;
+
+          if (current.status_action === 'IN' && !isCurrentDept) {
+            if (!isAdmin) {
+              setMarkerRoleWarning({ markerRole: user?.marker_role || 'UNASSIGNED', attemptedAction: 'OUT' });
+              return;
+            }
+          }
+
+          if (current.status_action === 'DONE') {
+            setError('This document is already marked DONE.');
+            return;
+          }
+        }
+
         try {
           const r = await paperAPI.scan(detectedRef, { auto: 1 });
           if (r?.data?.paper) {
             const targetPath = markMode ? '/scan' : '/document';
-            nav(`${targetPath}/${detectedRef}`);
-            onClose();
+            const lockKey = `scan-lock-${detectedRef}-${user?.uid || user?.username || 'user'}`;
+            sessionStorage.setItem(lockKey, String(Date.now()));
+            setTimeout(() => nav(`${targetPath}/${encodeURIComponent(detectedRef)}`), 0);
             return;
           }
         } catch (err) {
-          const errMsg = err.response?.data?.error || 'Paper not found.';
+          const errMsg = getErrorMessage(err) || 'Paper not found.';
           const isPaperNotFound = err.response?.status === 404 || errMsg === 'Paper not found.' || errMsg === 'Ref required.';
           if (isPaperNotFound) {
             const departmentFound = await loadDepartmentPapers(detectedRef);
             if (departmentFound) return;
+          }
+          if (showMarkerRoleWarning(err)) {
+            return;
           }
           setError(errMsg);
           return;
@@ -226,6 +246,51 @@ export default function ScanModal({ onClose, markMode = false }) {
     }
   };
 
+  const clearDepartmentResults = () => {
+    setDepartment(null);
+    setDepartmentPapers(null);
+    setDepartmentError('');
+  };
+
+  const getErrorMessage = (err) => {
+    if (!err) return '';
+    if (err.response?.data?.error) return err.response.data.error;
+    if (err.response?.data?.message) return err.response.data.message;
+    if (typeof err.response?.data === 'string') return err.response.data;
+    return err.message || '';
+  };
+
+  const showMarkerRoleWarning = (err) => {
+    const errMsg = getErrorMessage(err);
+    if (errMsg.includes('You are assigned to mark papers as')) {
+      const match = errMsg.match(/You are assigned to mark papers as '([^']+)', but scanning this paper would mark it as '([^']+)'/);
+      if (match && match[1] && match[2]) {
+        setMarkerRoleWarning({ markerRole: match[1], attemptedAction: match[2] });
+        return true;
+      }
+    }
+    if (errMsg.includes('not assigned a marker role')) {
+      setMarkerRoleWarning({ markerRole: 'UNASSIGNED', attemptedAction: 'SCAN' });
+      return true;
+    }
+    return false;
+  };
+
+  const loadDepartmentPapers = async (dept_id) => {
+    setDepartmentError('');
+    setDepartment(null);
+    setDepartmentPapers(null);
+    try {
+      const r = await deptAPI.papers(dept_id);
+      setDepartment(r.data.department);
+      setDepartmentPapers(r.data.papers || []);
+      return true;
+    } catch (err) {
+      setDepartmentError(err.response?.data?.error || 'Department not found.');
+      return false;
+    }
+  };
+
   const lookup = async (e) => {
     e.preventDefault();
     setError('');
@@ -248,12 +313,31 @@ export default function ScanModal({ onClose, markMode = false }) {
         const departmentFound = await loadDepartmentPapers(ref);
         if (departmentFound) return;
       }
+      if (showMarkerRoleWarning(err)) {
+        return;
+      }
       setError(errMsg);
     }
   };
 
   const goTo = () => { nav(`/paper/${result.id}`); onClose(); };
   const goScan = () => { nav(`/scan/${result.ref_code}`); onClose(); };
+
+  if (markerRoleWarning) {
+    return (
+      <MarkerRoleWarningModal
+        markerRole={markerRoleWarning.markerRole}
+        attemptedAction={markerRoleWarning.attemptedAction}
+        onClose={() => {
+          setMarkerRoleWarning(null);
+          setError('');
+          if (tab === 'camera' && !scanning) {
+            startCamera().catch(() => {});
+          }
+        }}
+      />
+    );
+  }
 
   return (
     <div className="overlay" onClick={e => e.target === e.currentTarget && onClose()}>
@@ -287,7 +371,7 @@ export default function ScanModal({ onClose, markMode = false }) {
               ) : (
                 <div>
                   <div style={{ background:'#000', borderRadius:8, overflow:'hidden', marginBottom:12, height:240, display:'flex', alignItems:'center', justifyContent:'center' }}>
-                    <video ref={videoRef} autoPlay playsInline style={{ width:'100%', height:'100%', objectFit:'cover' }} />
+                    <video ref={videoRef} autoPlay muted playsInline style={{ width:'100%', height:'100%', objectFit:'cover' }} />
                   </div>
                   <p className="sm muted" style={{ textAlign:'center' }}>
                     {scanning ? 'Scanning... point camera at QR code or barcode' : 'Point camera at QR code or barcode'}

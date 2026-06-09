@@ -20,6 +20,14 @@ export default function ScanRedirect() {
   const [markerRoleWarning, setMarkerRoleWarning] = useState(null);
   const scanRunningRef = useRef(false);
 
+  const normalizeMarkerRole = (raw) => {
+    if (!raw) return [];
+    if (Array.isArray(raw)) return raw.filter(Boolean);
+    return String(raw).split(',').map(r => r.trim()).filter(Boolean);
+  };
+
+  const markerRoleIncludes = (markerRole, action) => normalizeMarkerRole(markerRole).includes(action);
+
   const warningCard = (title, message) => (
     <div style={styles.bg}>
       <div style={styles.card}>
@@ -45,7 +53,27 @@ export default function ScanRedirect() {
       const now = Date.now();
       const last = Number(sessionStorage.getItem(lockKey) || 0);
       if (scanRunningRef.current) return;
-      if (now - last <= 2500) return; // recent scan already performed
+      if (now - last <= 2500) {
+        // A scan was just completed; load the latest paper state instead of re-scanning.
+        try {
+          const preview = await paperAPI.publicView(scannedRef);
+          const current = preview.data.paper;
+          if (current) {
+            setPaper(current);
+            setRemark(current?.logs?.[0]?.note === 'qr-auto-scan' ? '' : current?.logs?.[0]?.note || '');
+            setRemarkLocked(
+              current?.logs?.[0]?.action === 'IN' && current?.logs?.[1]?.action === 'RETURNED'
+            );
+            setDone(current?.status_action || 'IN');
+          }
+        } catch (err) {
+          const errorMsg = err.response?.data?.error || 'Paper not found.';
+          setError(errorMsg);
+        } finally {
+          setLoading(false);
+        }
+        return;
+      }
 
       scanRunningRef.current = true;
       sessionStorage.setItem(lockKey, String(now));
@@ -76,6 +104,14 @@ export default function ScanRedirect() {
             }
 
             if (current.status_action === 'IN' && !isCurrentDept) {
+              if (!isAdmin && !markerRoleIncludes(user?.marker_role, 'OUT')) {
+                setPaper(null);
+                setMarkerRoleWarning({ markerRole: user?.marker_role || 'UNASSIGNED', attemptedAction: 'OUT' });
+                setLoading(false);
+                scanRunningRef.current = false;
+                return;
+              }
+
               setPaper(current);
               setError(
                 <div>
