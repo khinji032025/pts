@@ -541,6 +541,16 @@ elseif ($action === 'edit_log') {
     $check->close();
     if (!$row) err('Status log not found.', 404);
 
+    // Prevent modification of notes locked by a RETURNED-to-origin IN scan.
+    $prevLog = $db->prepare("SELECT action FROM status_logs WHERE paper_id=? AND (created_at < (SELECT created_at FROM status_logs WHERE id=?) OR (created_at = (SELECT created_at FROM status_logs WHERE id=?) AND id < ?)) ORDER BY created_at DESC, id DESC LIMIT 1");
+    $prevLog->bind_param('iiii', $row['paper_id'], $id, $id, $id);
+    $prevLog->execute();
+    $prev = $prevLog->get_result()->fetch_assoc();
+    $prevLog->close();
+    if ($row['action'] === 'IN' && $prev && $prev['action'] === 'RETURNED') {
+        err('This remark is locked and cannot be modified.', 403);
+    }
+
     if ($s['role'] !== 'admin') {
         if (intval($row['user_id']) !== intval($s['uid'])) {
             err('Forbidden.', 403);
@@ -967,6 +977,10 @@ elseif ($action === 'scan') {
     while ($r = $res2->fetch_assoc()) $logs[] = $r;
     $st2->close();
     $paper['logs'] = $logs;
+    $paper['read_only_remark'] = false;
+    if (count($logs) >= 2 && $logs[0]['action'] === 'IN' && $logs[1]['action'] === 'RETURNED') {
+        $paper['read_only_remark'] = true;
+    }
 
     $st3 = $db->prepare("SELECT pi.id, pi.paper_id, pi.image_path, pi.uploaded_by, pi.uploaded_at, u.username FROM paper_images pi LEFT JOIN users u ON u.id=pi.uploaded_by WHERE pi.paper_id=? ORDER BY pi.uploaded_at DESC");
     $st3->bind_param('i', $paper['id']);

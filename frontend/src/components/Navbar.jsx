@@ -4,7 +4,6 @@ import { useAuth } from '../context/AuthContext';
 import ChangePasswordModal from './ChangePasswordModal';
 import ScanModal from './ScanModal';
 import DepartmentQRModal from './DepartmentQRModal';
-import DepartmentUsersModal from './DepartmentUsersModal';
 
 export default function Navbar({ title, sub, greeting, notifCount = 0, recentPapers = [], dept_id, dept_name, onNotificationsClick, onNotificationOpen, onNotificationRead, onClearHistory }) {
   const { user, logout } = useAuth();
@@ -12,7 +11,6 @@ export default function Navbar({ title, sub, greeting, notifCount = 0, recentPap
   const [showPw, setShowPw] = useState(false);
   const [showScan, setShowScan] = useState(false);
   const [showDeptQR, setShowDeptQR] = useState(false);
-  const [showDeptUsers, setShowDeptUsers] = useState(false);
   const [showNotifMenu, setShowNotifMenu] = useState(false);
   const [showWelcome, setShowWelcome] = useState(false);
   const [dateTime, setDateTime] = useState(() => new Date());
@@ -198,9 +196,6 @@ export default function Navbar({ title, sub, greeting, notifCount = 0, recentPap
             </div>
           )}
           {dept_id && dept_name && (
-            <button className="btn btn-ghost btn-sm" type="button" onClick={() => setShowDeptUsers(true)}>👥 Manage Department Users</button>
-          )}
-          {dept_id && dept_name && (
             <button className="btn btn-ghost btn-sm" type="button" onClick={() => setShowDeptQR(true)}>🏢 Department QR</button>
           )}
           <button className="btn btn-ghost btn-sm" type="button" onClick={() => setShowScan(true)}>📷 Scan</button>
@@ -210,13 +205,6 @@ export default function Navbar({ title, sub, greeting, notifCount = 0, recentPap
       </nav>
       {showPw && <ChangePasswordModal onClose={() => setShowPw(false)} />}
       {showScan && <ScanModal onClose={() => setShowScan(false)} markMode />}
-      {showDeptUsers && (
-        <DepartmentUsersModal
-          dept_id={dept_id}
-          dept_name={dept_name}
-          onClose={() => setShowDeptUsers(false)}
-        />
-      )}
       {showDeptQR && <DepartmentQRModal dept_id={dept_id} dept_name={dept_name} onClose={() => setShowDeptQR(false)} />}
       {showWelcome && (greeting || user) && (
         <div className="welcome-overlay">

@@ -14,6 +14,7 @@ export default function ScanRedirect() {
   const [done, setDone]     = useState('');
   const [error, setError]   = useState('');
   const [remark, setRemark] = useState('');
+  const [remarkLocked, setRemarkLocked] = useState(false);
   const [savingRemark, setSavingRemark] = useState(false);
   const [remarkMsg, setRemarkMsg] = useState('');
   const [markerRoleWarning, setMarkerRoleWarning] = useState(null);
@@ -93,6 +94,9 @@ export default function ScanRedirect() {
         const scannedPaper = r.data.paper;
         setPaper(scannedPaper);
         setRemark(scannedPaper?.logs?.[0]?.note === 'qr-auto-scan' ? '' : scannedPaper?.logs?.[0]?.note || '');
+        setRemarkLocked(
+          scannedPaper?.logs?.[0]?.action === 'IN' && scannedPaper?.logs?.[1]?.action === 'RETURNED'
+        );
         setDone(scannedPaper?.status_action || 'IN');
       } catch (err) {
         const errorMsg = err.response?.data?.error || 'Paper not found.';
@@ -147,6 +151,9 @@ export default function ScanRedirect() {
       const refreshed = r.data.paper;
       setPaper(refreshed);
       setRemark(refreshed?.logs?.[0]?.note === 'qr-auto-scan' ? '' : refreshed?.logs?.[0]?.note || '');
+      setRemarkLocked(
+        refreshed?.logs?.[0]?.action === 'IN' && refreshed?.logs?.[1]?.action === 'RETURNED'
+      );
     } catch (err) {
       console.error('Failed to refresh scanned paper:', err);
     }
@@ -243,19 +250,33 @@ export default function ScanRedirect() {
           <textarea
             className="inp"
             rows={4}
-            placeholder="Optional instructions, concerns, or notes for the next department."
+            placeholder={remarkLocked ? 'This remark is locked and cannot be changed.' : 'Optional instructions, concerns, or notes for the next department.'}
             value={remark}
             onChange={e => setRemark(e.target.value)}
-            style={{ width: '100%', resize: 'vertical' }}
+            style={{
+              width: '100%',
+              resize: 'vertical',
+              background: remarkLocked ? '#f5f6f7' : undefined,
+              color: remarkLocked ? '#5c5f65' : undefined,
+              cursor: remarkLocked ? 'not-allowed' : undefined,
+            }}
+            readOnly={remarkLocked}
           />
+          {remarkLocked && (
+            <div style={{ marginTop: 8, color: '#6e6e6e', fontSize: 13 }}>
+              This remark is locked because the paper was returned to origin. The previously recorded note is preserved and cannot be changed.
+            </div>
+          )}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, gap: 10 }}>
-            <button
-              className="btn btn-outline"
-              onClick={saveRemark}
-              disabled={savingRemark || !paper?.logs?.length}
-            >
-              {savingRemark ? 'Saving…' : 'Save Remark'}
-            </button>
+            {!remarkLocked && (
+              <button
+                className="btn btn-outline"
+                onClick={saveRemark}
+                disabled={savingRemark || !paper?.logs?.length}
+              >
+                {savingRemark ? 'Saving…' : 'Save Remark'}
+              </button>
+            )}
             {remarkMsg && <span style={{ color: '#1a7f4e' }}>{remarkMsg}</span>}
           </div>
         </div>
