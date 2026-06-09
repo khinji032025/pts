@@ -7,6 +7,16 @@ cors();
 
 $action = $_GET['action'] ?? '';
 
+function currentStatusSummary($db, $paper_id) {
+    $st = $db->prepare("SELECT l.action, d.name dept FROM status_logs l JOIN departments d ON d.id=l.department_id WHERE l.paper_id=? ORDER BY l.created_at DESC, l.id DESC LIMIT 1");
+    if (!$st) return ['action' => null, 'dept' => null];
+    $st->bind_param('i', $paper_id);
+    $st->execute();
+    $row = $st->get_result()->fetch_assoc();
+    $st->close();
+    return ['action' => $row['action'] ?? null, 'dept' => $row['dept'] ?? null];
+}
+
 if ($action === 'list') {
     requireLogin();
     $db = getDB();
@@ -14,6 +24,44 @@ if ($action === 'list') {
     $rows = [];
     while ($r = $res->fetch_assoc()) $rows[] = $r;
     ok(['departments' => $rows]);
+}
+
+elseif ($action === 'papers') {
+    requireLogin();
+    $dept_id = intval($_GET['dept_id'] ?? 0);
+    if (!$dept_id) err('Department id required.');
+
+    $db = getDB();
+    $st = $db->prepare("SELECT id, name FROM departments WHERE id=? LIMIT 1");
+    $st->bind_param('i', $dept_id);
+    $st->execute();
+    $department = $st->get_result()->fetch_assoc();
+    $st->close();
+    if (!$department) err('Department not found.', 404);
+
+    $sql = "SELECT p.id,p.ref_code,p.title FROM papers p WHERE p.origin_department_id=? OR EXISTS (SELECT 1 FROM status_logs sl WHERE sl.paper_id=p.id AND sl.department_id=?) ORDER BY p.created_at DESC";
+    $st = $db->prepare($sql);
+    $st->bind_param('ii', $dept_id, $dept_id);
+    $st->execute();
+    $res = $st->get_result();
+
+    $papers = [];
+    while ($row = $res->fetch_assoc()) {
+        $status = currentStatusSummary($db, intval($row['id']));
+        $papers[] = [
+            'id' => intval($row['id']),
+            'ref_code' => $row['ref_code'],
+            'title' => $row['title'],
+            'status_action' => $status['action'],
+            'status_dept' => $status['dept'],
+        ];
+    }
+    $st->close();
+
+    ok([
+        'department' => $department,
+        'papers' => $papers,
+    ]);
 }
 
 elseif ($action === 'create') {

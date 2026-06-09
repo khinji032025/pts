@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { paperAPI } from '../utils/api';
+import { paperAPI, deptAPI } from '../utils/api';
 import StatusBadge from './StatusBadge';
 
 export default function ScanModal({ onClose, markMode = false }) {
@@ -9,6 +9,10 @@ export default function ScanModal({ onClose, markMode = false }) {
   const [ref, setRef]       = useState('');
   const [error, setError]   = useState('');
   const [result, setResult] = useState(null);
+  const [department, setDepartment] = useState(null);
+  const [departmentPapers, setDepartmentPapers] = useState(null);
+  const [departmentError, setDepartmentError] = useState('');
+  const [screenWidth, setScreenWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
   const [camError, setCamError] = useState('');
   const [scanning, setScanning] = useState(false);
   const videoRef = useRef();
@@ -21,6 +25,14 @@ export default function ScanModal({ onClose, markMode = false }) {
     else stopCamera();
     return () => stopCamera();
   }, [tab]);
+
+  useEffect(() => {
+    const onResize = () => setScreenWidth(window.innerWidth);
+    window.addEventListener('resize', onResize);
+    // initialize
+    setScreenWidth(window.innerWidth);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   const startCamera = async () => {
     setCamError('');
@@ -110,14 +122,61 @@ export default function ScanModal({ onClose, markMode = false }) {
         return null;
       };
 
+      const clearDepartmentResults = () => {
+        setDepartment(null);
+        setDepartmentPapers(null);
+        setDepartmentError('');
+      };
+
+      const loadDepartmentPapers = async (dept_id) => {
+        setDepartmentError('');
+        setDepartment(null);
+        setDepartmentPapers(null);
+        try {
+          const r = await deptAPI.papers(dept_id);
+          setDepartment(r.data.department);
+          setDepartmentPapers(r.data.papers || []);
+          return true;
+        } catch (err) {
+          setDepartmentError(err.response?.data?.error || 'Department not found.');
+          return false;
+        }
+      };
+
       const handleDetectedRef = async (detectedRef) => {
         if (detectLockRef.current) return;
         detectLockRef.current = true;
         setScanning(false);
         stopCamera();
-        const targetPath = markMode ? '/scan' : '/document';
-        nav(`${targetPath}/${detectedRef}`);
-        onClose();
+        setError('');
+        setDepartmentError('');
+        setResult(null);
+        clearDepartmentResults();
+
+        // If the scanned value is a pure department id, show department lookup first.
+        if (/^\d+$/.test(detectedRef)) {
+          const departmentFound = await loadDepartmentPapers(detectedRef);
+          if (departmentFound) return;
+        }
+
+        try {
+          const r = await paperAPI.scan(detectedRef, { auto: 1 });
+          if (r?.data?.paper) {
+            const targetPath = markMode ? '/scan' : '/document';
+            nav(`${targetPath}/${detectedRef}`);
+            onClose();
+            return;
+          }
+        } catch (err) {
+          const errMsg = err.response?.data?.error || 'Paper not found.';
+          const isPaperNotFound = err.response?.status === 404 || errMsg === 'Paper not found.' || errMsg === 'Ref required.';
+          if (isPaperNotFound) {
+            const departmentFound = await loadDepartmentPapers(detectedRef);
+            if (departmentFound) return;
+          }
+          setError(errMsg);
+          return;
+        }
       };
 
       const loop = async () => {
@@ -169,12 +228,27 @@ export default function ScanModal({ onClose, markMode = false }) {
 
   const lookup = async (e) => {
     e.preventDefault();
-    setError(''); setResult(null);
+    setError('');
+    setDepartmentError('');
+    setResult(null);
+    clearDepartmentResults();
+
+    if (/^\d+$/.test(ref)) {
+      const departmentFound = await loadDepartmentPapers(ref);
+      if (departmentFound) return;
+    }
+
     try {
       const r = await paperAPI.scan(ref);
       setResult(r.data.paper);
     } catch (err) {
-      setError(err.response?.data?.error || 'Paper not found.');
+      const errMsg = err.response?.data?.error || 'Paper not found.';
+      const isPaperNotFound = err.response?.status === 404 || errMsg === 'Paper not found.' || errMsg === 'Ref required.';
+      if (isPaperNotFound) {
+        const departmentFound = await loadDepartmentPapers(ref);
+        if (departmentFound) return;
+      }
+      setError(errMsg);
     }
   };
 
@@ -183,22 +257,23 @@ export default function ScanModal({ onClose, markMode = false }) {
 
   return (
     <div className="overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ maxWidth: 480 }}>
+      <div className="modal" style={{ maxWidth: (department && screenWidth >= 768) ? 760 : 480 }}>
         <div className="modal-head">
-          <span className="modal-title">📷 Scan / Lookup</span>
+          <span className="modal-title">{department ? '📄 Department documents' : '📷 Scan / Lookup'}</span>
           <button className="btn btn-outline btn-sm" onClick={() => { stopCamera(); onClose(); }}>✕</button>
         </div>
 
-        {/* Tabs - Only Camera */}
-        <div style={{ display:'flex', borderBottom:'2px solid var(--border)', padding:'0 22px' }}>
-          <div style={{ padding:'10px 16px', fontWeight:700, color:'var(--navy)', fontSize:13 }}>
-            {markMode ? '📷 Scan Document QR Code to mark status' : '📷 Scan Document QR Code'}
+        {!department && (
+          <div style={{ display:'flex', borderBottom:'2px solid var(--border)', padding:'0 22px' }}>
+            <div style={{ padding:'10px 16px', fontWeight:700, color:'var(--navy)', fontSize:13 }}>
+              {markMode ? '📷 Scan Document QR Code to mark status' : '📷 Scan Document QR Code'}
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="modal-body">
           {/* Camera tab */}
-          {(tab === 'camera' || true) && (
+          {(!department && (tab === 'camera' || true)) && (
             <div>
               {camError ? (
                 <div>
@@ -260,6 +335,40 @@ export default function ScanModal({ onClose, markMode = false }) {
               )}
             </div>
           )}
+
+          {department && (
+            <div className="card mt4">
+              <div className="card-body">
+                <div className="alert a-info mb2">📄 List of Papers for {department.name}</div>
+                {departmentPapers.length === 0 ? (
+                  <div style={{ fontSize: 13, color: 'var(--t2)' }}>No documents found for this department.</div>
+                ) : (
+                  <div style={{ maxHeight: 280, overflowY: 'auto' }}>
+                    <table style={{ width:'100%', borderCollapse:'collapse' }}>
+                      <thead>
+                        <tr>
+                          <th style={{ textAlign:'left', padding:'8px 0', fontSize:11, color:'var(--t2)', textTransform:'uppercase' }}>Ref</th>
+                          <th style={{ textAlign:'left', padding:'8px 0', fontSize:11, color:'var(--t2)', textTransform:'uppercase' }}>Title</th>
+                          <th style={{ textAlign:'left', padding:'8px 0', fontSize:11, color:'var(--t2)', textTransform:'uppercase' }}>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {departmentPapers.map((paper) => (
+                          <tr key={paper.id} style={{ borderTop:'1px solid var(--border)' }}>
+                            <td style={{ padding:'10px 0', verticalAlign:'top', fontSize:13 }}>{paper.ref_code}</td>
+                            <td style={{ padding:'10px 0', verticalAlign:'top', fontSize:13 }}>{paper.title}</td>
+                            <td style={{ padding:'10px 0', verticalAlign:'top', fontSize:13 }}>{paper.status_action || 'Unknown'}{paper.status_dept ? ` @ ${paper.status_dept}` : ''}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {departmentError && <div className="alert a-err" style={{ marginTop: 14 }}>{departmentError}</div>}
         </div>
 
         <div className="modal-foot">

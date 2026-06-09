@@ -9,6 +9,9 @@ export default function LoginQRModal({ onClose }) {
   const [deptId, setDeptId] = useState('');
   const [error, setError] = useState('');
   const [result, setResult] = useState(null);
+  const [departmentPapers, setDepartmentPapers] = useState(null);
+  const [papersError, setPapersError] = useState('');
+  const [loadingPapers, setLoadingPapers] = useState(false);
   const [stream, setStream] = useState(null);
   const [cameraFacing, setCameraFacing] = useState('environment');
   const scannerRef = useRef(null);
@@ -119,20 +122,10 @@ export default function LoginQRModal({ onClose }) {
             setError('Could not extract department id from QR.');
             return;
           }
-          setResult({ id: deptIdParsed });
-
-          // Attempt direct QR login
-          try {
-            const user = await qrLogin(deptIdParsed);
-            if (user) {
-              onClose();
-              navigate('/dept');
-            } else {
-              setError('QR login failed.');
-            }
-          } catch (err) {
-            setError(err.response?.data?.error || 'QR login failed.');
-          }
+          setResult(null);
+          setDepartmentPapers(null);
+          setPapersError('');
+          await loadDepartmentPapers(deptIdParsed);
         }
       );
     } catch (err) {
@@ -171,23 +164,28 @@ export default function LoginQRModal({ onClose }) {
     setStream(null);
   };
 
+  const loadDepartmentPapers = async (dept_id) => {
+    setError('');
+    setPapersError('');
+    setLoadingPapers(true);
+    setResult(null);
+    setDepartmentPapers(null);
+    try {
+      const r = await deptAPI.papers(dept_id);
+      setResult(r.data.department);
+      setDepartmentPapers(r.data.papers || []);
+      setLoadingPapers(false);
+      stopCamera();
+    } catch (err) {
+      setLoadingPapers(false);
+      setPapersError(err.response?.data?.error || 'Unable to load department documents.');
+    }
+  };
+
   const lookup = async (e) => {
     if (e) e.preventDefault();
     if (!deptId) return;
-    setError(''); 
-    setResult(null);
-    try {
-      const r = await deptAPI.list();
-      const dept = r.data.departments.find(d => String(d.id) === String(deptId));
-      if (dept) {
-        setResult(dept);
-        stopCamera();
-      } else {
-        setError('Department not found.');
-      }
-    } catch (err) {
-      setError(err.response?.data?.error || 'Invalid QR code.');
-    }
+    await loadDepartmentPapers(deptId);
   };
 
   const handleLogin = () => {
@@ -275,19 +273,64 @@ export default function LoginQRModal({ onClose }) {
           )}
 
           {result && (
-            <div className="card mt4">
-              <div className="card-body">
-                <div className="alert a-ok mb2">✅ Department found!</div>
-                <table style={{ width:'100%' }}>
-                  <tbody>
-                    <tr style={{ borderBottom:'1px solid var(--border)' }}>
-                      <td style={{ padding:'8px 0', fontWeight:600, fontSize:11, color:'var(--t2)', width:70, textTransform:'uppercase' }}>Department</td>
-                      <td style={{ padding:'8px 0' }}>{result.name}</td>
-                    </tr>
-                  </tbody>
-                </table>
+            <>
+              <div className="card mt4">
+                <div className="card-body">
+                  <div className="alert a-ok mb2">✅ Department found!</div>
+                  <table style={{ width:'100%' }}>
+                    <tbody>
+                      <tr style={{ borderBottom:'1px solid var(--border)' }}>
+                        <td style={{ padding:'8px 0', fontWeight:600, fontSize:11, color:'var(--t2)', width:70, textTransform:'uppercase' }}>Department</td>
+                        <td style={{ padding:'8px 0' }}>{result.name}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
+
+              <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+                <button type="button" className="btn btn-outline" onClick={() => loadDepartmentPapers(result.id)} disabled={loadingPapers}>
+                  {loadingPapers ? 'Refreshing documents…' : 'Refresh documents'}
+                </button>
+                <button type="button" className="btn btn-navy" onClick={handleLogin} style={{ flex: 1, minWidth: 160 }}>
+                  Login to {result.name}
+                </button>
+              </div>
+
+              {papersError && <div className="alert a-err" style={{ marginTop: 12 }}>{papersError}</div>}
+
+              {departmentPapers && (
+                <div className="card mt4">
+                  <div className="card-body">
+                    <div className="alert a-info mb2">📄 Read-only documents for {result.name}</div>
+                    {departmentPapers.length === 0 ? (
+                      <div style={{ fontSize: 13, color: 'var(--t2)' }}>No documents found for this department.</div>
+                    ) : (
+                      <div style={{ maxHeight: 280, overflowY: 'auto' }}>
+                        <table style={{ width:'100%', borderCollapse:'collapse' }}>
+                          <thead>
+                            <tr>
+                              <th style={{ textAlign:'left', padding:'8px 0', fontSize:11, color:'var(--t2)', textTransform:'uppercase' }}>Ref</th>
+                              <th style={{ textAlign:'left', padding:'8px 0', fontSize:11, color:'var(--t2)', textTransform:'uppercase' }}>Title</th>
+                              <th style={{ textAlign:'left', padding:'8px 0', fontSize:11, color:'var(--t2)', textTransform:'uppercase' }}>Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {departmentPapers.map((paper) => (
+                              <tr key={paper.id} style={{ borderTop:'1px solid var(--border)' }}>
+                                <td style={{ padding:'10px 0', verticalAlign:'top', fontSize:13 }}>{paper.ref_code}</td>
+                                <td style={{ padding:'10px 0', verticalAlign:'top', fontSize:13 }}>{paper.title}</td>
+                                <td style={{ padding:'10px 0', verticalAlign:'top', fontSize:13 }}>{paper.status_action || 'Unknown'}{paper.status_dept ? ` @ ${paper.status_dept}` : ''}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
         <div className="modal-foot">

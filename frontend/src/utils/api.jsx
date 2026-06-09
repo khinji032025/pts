@@ -21,9 +21,10 @@ export const authAPI = {
 };
 
 export const deptAPI = {
-  list:   ()    => api.get('/departments.php?action=list'),
-  create: (d)   => api.post('/departments.php?action=create', d),
-  delete: (id)  => api.delete(`/departments.php?action=delete&id=${id}`),
+  list:   ()        => api.get('/departments.php?action=list'),
+  papers: (dept_id) => api.get('/departments.php?action=papers', { params: { dept_id } }),
+  create: (d)       => api.post('/departments.php?action=create', d),
+  delete: (id)      => api.delete(`/departments.php?action=delete&id=${id}`),
 };
 
 export const userAPI = {
