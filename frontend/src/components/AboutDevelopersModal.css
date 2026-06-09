@@ -182,6 +182,7 @@
 .developer-role,
 .developer-email {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
   gap: 4px;
@@ -195,6 +196,11 @@
 
 .developer-email {
   color: #475569;
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
 .course-icon,
@@ -202,15 +208,20 @@
   font-size: 16px;
   display: flex;
   align-items: center;
+  flex: 0 0 auto;
 }
 
 .developer-email a {
   color: #0d1f3d;
   text-decoration: none;
   transition: all 0.2s ease;
-  word-break: break-all;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  min-width: 0;
+  flex: 1 1 auto;
   font-weight: 500;
-  font-size: 10px;
+  font-size: 9px;
 }
 
 .developer-email a:hover {
