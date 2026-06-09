@@ -588,11 +588,14 @@ td { padding:11px 14px; vertical-align:middle; text-align:center; }
   align-items: flex-start;
   justify-content: center;
   pointer-events: none;
-  padding-top: 68px;
+  /* Respect device safe-area and provide extra spacing for taller navbars on mobile */
+  padding-top: calc(68px + env(safe-area-inset-top, 0px));
+  z-index: 3000;
 }
 .admin-shell .welcome-overlay {
-  z-index: 1;
-  padding-top: 112px;
+  /* Ensure overlay sits above admin shell header */
+  z-index: 3000;
+  padding-top: calc(112px + env(safe-area-inset-top, 0px));
   pointer-events: none !important;
 }
 .welcome-box {
