@@ -16,6 +16,7 @@ export default function ScanModal({ onClose, markMode = false }) {
   const [departmentPapers, setDepartmentPapers] = useState(null);
   const [departmentError, setDepartmentError] = useState('');
   const [markerRoleWarning, setMarkerRoleWarning] = useState(null);
+  const [scanStatusWarning, setScanStatusWarning] = useState(null);
   const [screenWidth, setScreenWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
   const [camError, setCamError] = useState('');
   const [scanning, setScanning] = useState(false);
@@ -164,7 +165,7 @@ export default function ScanModal({ onClose, markMode = false }) {
 
           if (current.status_action === 'IN' && !isCurrentDept) {
             if (!isAdmin) {
-              setMarkerRoleWarning({ markerRole: user?.marker_role || 'UNASSIGNED', attemptedAction: 'OUT' });
+              setScanStatusWarning({ statusDept: current.status_dept });
               return;
             }
           }
@@ -181,7 +182,7 @@ export default function ScanModal({ onClose, markMode = false }) {
             const targetPath = markMode ? '/scan' : '/document';
             const lockKey = `scan-lock-${detectedRef}-${user?.uid || user?.username || 'user'}`;
             sessionStorage.setItem(lockKey, String(Date.now()));
-            setTimeout(() => nav(`${targetPath}/${encodeURIComponent(detectedRef)}`), 0);
+            setTimeout(() => nav(`${targetPath}/${encodeURIComponent(detectedRef)}`), 250);
             return;
           }
         } catch (err) {
@@ -189,7 +190,9 @@ export default function ScanModal({ onClose, markMode = false }) {
           const isPaperNotFound = err.response?.status === 404 || errMsg === 'Paper not found.' || errMsg === 'Ref required.';
           if (isPaperNotFound) {
             const departmentFound = await loadDepartmentPapers(detectedRef);
-            if (departmentFound) return;
+            if (departmentFound) {
+              return;
+            }
           }
           if (showMarkerRoleWarning(err)) {
             return;
@@ -339,6 +342,30 @@ export default function ScanModal({ onClose, markMode = false }) {
     );
   }
 
+  if (scanStatusWarning) {
+    return (
+      <div className="overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+        <div className="modal" style={{ maxWidth: 500 }}>
+          <div className="modal-head">
+            <span className="modal-title">⚠️ Status Warning</span>
+            <button className="btn btn-outline btn-sm" onClick={() => { setScanStatusWarning(null); stopCamera(); onClose(); }}>✕</button>
+          </div>
+          <div className="modal-body">
+            <div className="alert a-err" style={{ textAlign: 'center' }}>
+              <strong>This paper is currently marked IN at {scanStatusWarning.statusDept}.</strong>
+              <div style={{ marginTop: 10 }}>
+                You can only mark this paper once it has been marked OUT by {scanStatusWarning.statusDept}.
+              </div>
+            </div>
+          </div>
+          <div className="modal-foot">
+            <button className="btn btn-outline btn-full" onClick={() => { setScanStatusWarning(null); stopCamera(); onClose(); }}>OK</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal" style={{ maxWidth: (department && screenWidth >= 768) ? 760 : 480 }}>
@@ -356,8 +383,28 @@ export default function ScanModal({ onClose, markMode = false }) {
         )}
 
         <div className="modal-body">
+          {scanStatusWarning && (
+            <div className="alert a-err" style={{ marginBottom: 16, textAlign: 'center' }}>
+              <strong>This paper is currently marked IN at {scanStatusWarning.statusDept}.</strong>
+              <div style={{ marginTop: 10 }}>
+                You can only mark this paper once it has been marked OUT by {scanStatusWarning.statusDept}.
+              </div>
+              <button
+                type="button"
+                className="btn btn-outline btn-full"
+                style={{ marginTop: 16 }}
+                onClick={() => {
+                  setScanStatusWarning(null);
+                  if (!streamRef.current) startCamera().catch(() => {});
+                }}
+              >
+                OK
+              </button>
+            </div>
+          )}
+
           {/* Camera tab */}
-          {(!department && (tab === 'camera' || true)) && (
+          {!department && (tab === 'camera' || true) && (
             <div>
               {camError ? (
                 <div>
