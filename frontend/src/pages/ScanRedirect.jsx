@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { paperAPI } from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import StatusBadge from '../components/StatusBadge';
@@ -8,6 +8,7 @@ import MarkerRoleWarningModal from '../components/MarkerRoleWarningModal';
 export default function ScanRedirect() {
   const { id: scannedRef } = useParams();
   const nav = useNavigate();
+  const location = useLocation();
   const { user, loading: authLoading } = useAuth();
   const [paper, setPaper]   = useState(null);
   const [loading, setLoading] = useState(true);
@@ -46,6 +47,20 @@ export default function ScanRedirect() {
   useEffect(() => {
     if (authLoading) return;
     if (!user) { nav(`/login?next=/scan/${scannedRef}`); return; }
+
+    // If navigation passed the scanned paper via state, use it to avoid
+    // showing an extra loading screen in this page.
+    if (location?.state?.paper) {
+      const scannedPaper = location.state.paper;
+      setPaper(scannedPaper);
+      setRemark(scannedPaper?.logs?.[0]?.note === 'qr-auto-scan' ? '' : scannedPaper?.logs?.[0]?.note || '');
+      setRemarkLocked(
+        scannedPaper?.logs?.[0]?.action === 'IN' && scannedPaper?.logs?.[1]?.action === 'RETURNED'
+      );
+      setDone(scannedPaper?.status_action || 'IN');
+      setLoading(false);
+      return;
+    }
 
     const runScan = async () => {
       // Prevent multiple concurrent scans and duplicate requests.

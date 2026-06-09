@@ -20,6 +20,8 @@ export default function ScanModal({ onClose, markMode = false }) {
   const [screenWidth, setScreenWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
   const [camError, setCamError] = useState('');
   const [scanning, setScanning] = useState(false);
+  const [loadingPaper, setLoadingPaper] = useState(false);
+  const [pendingRef, setPendingRef] = useState(null);
   const videoRef = useRef();
   const streamRef = useRef();
   const rafRef = useRef();
@@ -135,70 +137,97 @@ export default function ScanModal({ onClose, markMode = false }) {
       const handleDetectedRef = async (detectedRef) => {
         if (detectLockRef.current) return;
         detectLockRef.current = true;
-        setScanning(false);
-        stopCamera();
-        setError('');
-        setDepartmentError('');
-        setResult(null);
-        clearDepartmentResults();
-
-        // If the scanned value is a pure department id, show department lookup first.
-        if (/^\d+$/.test(detectedRef)) {
-          const departmentFound = await loadDepartmentPapers(detectedRef);
-          if (departmentFound) return;
-        }
-
-        let preview = null;
-        if (markMode) {
-          try {
-            const previewResp = await paperAPI.publicView(detectedRef);
-            preview = previewResp.data.paper;
-          } catch {
-            preview = null;
-          }
-        }
-
-        if (preview) {
-          const current = preview;
-          const isAdmin = user?.role === 'admin';
-          const isCurrentDept = user?.dept_name && current.status_dept && user.dept_name === current.status_dept;
-
-          if (current.status_action === 'IN' && !isCurrentDept) {
-            if (!isAdmin) {
-              setScanStatusWarning({ statusDept: current.status_dept });
-              return;
-            }
-          }
-
-          if (current.status_action === 'DONE') {
-            setError('This document is already marked DONE.');
-            return;
-          }
-        }
-
         try {
-          const r = await paperAPI.scan(detectedRef, { auto: 1 });
-          if (r?.data?.paper) {
-            const targetPath = markMode ? '/scan' : '/document';
-            const lockKey = `scan-lock-${detectedRef}-${user?.uid || user?.username || 'user'}`;
-            sessionStorage.setItem(lockKey, String(Date.now()));
-            setTimeout(() => nav(`${targetPath}/${encodeURIComponent(detectedRef)}`), 250);
-            return;
-          }
-        } catch (err) {
-          const errMsg = getErrorMessage(err) || 'Paper not found.';
-          const isPaperNotFound = err.response?.status === 404 || errMsg === 'Paper not found.' || errMsg === 'Ref required.';
-          if (isPaperNotFound) {
+          // stop scanning visuals and show loading UI while we resolve the scan
+          setScanning(false);
+          stopCamera();
+          setError('');
+          setDepartmentError('');
+          setResult(null);
+          clearDepartmentResults();
+
+          // Show loading UI in modal
+          setPendingRef(detectedRef);
+          setLoadingPaper(true);
+
+          // If the scanned value is a pure department id, show department lookup first.
+          if (/^\d+$/.test(detectedRef)) {
             const departmentFound = await loadDepartmentPapers(detectedRef);
             if (departmentFound) {
+              setLoadingPaper(false);
+              setPendingRef(null);
               return;
             }
           }
-          if (showMarkerRoleWarning(err)) {
+
+          let preview = null;
+          if (markMode) {
+            try {
+              const previewResp = await paperAPI.publicView(detectedRef);
+              preview = previewResp.data.paper;
+            } catch {
+              preview = null;
+            }
+          }
+
+          if (preview) {
+            const current = preview;
+            const isAdmin = user?.role === 'admin';
+            const isCurrentDept = user?.dept_name && current.status_dept && user.dept_name === current.status_dept;
+
+            if (current.status_action === 'IN' && !isCurrentDept) {
+              if (!isAdmin) {
+                setScanStatusWarning({ statusDept: current.status_dept });
+                setLoadingPaper(false);
+                setPendingRef(null);
+                return;
+              }
+            }
+
+            if (current.status_action === 'DONE') {
+              setError('This document is already marked DONE.');
+              setLoadingPaper(false);
+              setPendingRef(null);
+              return;
+            }
+          }
+
+          try {
+            const r = await paperAPI.scan(detectedRef, { auto: 1 });
+            if (r?.data?.paper) {
+              const targetPath = markMode ? '/scan' : '/document';
+              const lockKey = `scan-lock-${detectedRef}-${user?.uid || user?.username || 'user'}`;
+              sessionStorage.setItem(lockKey, String(Date.now()));
+              if (typeof onClose === 'function') onClose();
+              const scanned = r.data.paper;
+              const autoMarked = r.data.auto_marked;
+              // pass the scanned paper to the route so ScanRedirect can render immediately
+              nav(`${targetPath}/${encodeURIComponent(detectedRef)}`, { state: { paper: scanned, auto_marked: autoMarked } });
+              return;
+            }
+          } catch (err) {
+            const errMsg = getErrorMessage(err) || 'Paper not found.';
+            const isPaperNotFound = err.response?.status === 404 || errMsg === 'Paper not found.' || errMsg === 'Ref required.';
+            if (isPaperNotFound) {
+              const departmentFound = await loadDepartmentPapers(detectedRef);
+              if (departmentFound) {
+                setLoadingPaper(false);
+                setPendingRef(null);
+                return;
+              }
+            }
+            if (showMarkerRoleWarning(err)) {
+              setLoadingPaper(false);
+              setPendingRef(null);
+              return;
+            }
+            setError(errMsg);
+            setLoadingPaper(false);
+            setPendingRef(null);
             return;
           }
-          setError(errMsg);
-          return;
+        } finally {
+          detectLockRef.current = false;
         }
       };
 
@@ -417,12 +446,21 @@ export default function ScanModal({ onClose, markMode = false }) {
                 </div>
               ) : (
                 <div>
-                  <div style={{ background:'#000', borderRadius:8, overflow:'hidden', marginBottom:12, height:240, display:'flex', alignItems:'center', justifyContent:'center' }}>
-                    <video ref={videoRef} autoPlay muted playsInline style={{ width:'100%', height:'100%', objectFit:'cover' }} />
-                  </div>
-                  <p className="sm muted" style={{ textAlign:'center' }}>
-                    {scanning ? 'Scanning... point camera at QR code or barcode' : 'Point camera at QR code or barcode'}
-                  </p>
+                  {loadingPaper ? (
+                    <div style={{ background:'#fff', borderRadius:8, overflow:'hidden', marginBottom:12, height:140, display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column' }}>
+                      <div className="spinner" style={{ margin: '18px auto' }} />
+                      <p style={{ marginTop: 6, color: '#888' }}>Loading paper...</p>
+                    </div>
+                  ) : (
+                    <div>
+                      <div style={{ background:'#000', borderRadius:8, overflow:'hidden', marginBottom:12, height:240, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                        <video ref={videoRef} autoPlay muted playsInline style={{ width:'100%', height:'100%', objectFit:'cover' }} />
+                      </div>
+                      <p className="sm muted" style={{ textAlign:'center' }}>
+                        {scanning ? 'Scanning... point camera at QR code or barcode' : 'Point camera at QR code or barcode'}
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
