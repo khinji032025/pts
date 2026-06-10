@@ -57,7 +57,12 @@ body {
 .nb-title { font-size:14px; font-weight:700; letter-spacing:.3px; }
 .nb-meta { display:block; font-size:10px; line-height:1.25; color:rgba(255,255,255,.8); margin-top:2px; }
 .nb-sub   { font-size:11px; color:var(--gold2); display:block; line-height:1; }
-.nb-actions { display:flex; gap:8px; }
+.nb-actions {
+  display:flex;
+  gap:8px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
 .notif-menu {
   position: absolute;
 }
@@ -599,7 +604,7 @@ td { padding:11px 14px; vertical-align:middle; text-align:center; }
   pointer-events: none !important;
 }
 .welcome-box {
-  pointer-events: auto;
+  pointer-events: none;
   background: #fff;
   padding: 18px 22px;
   border-radius: 12px;

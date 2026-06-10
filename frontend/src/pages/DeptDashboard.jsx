@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import Navbar from '../components/Navbar';
 import PapersTable from '../components/PapersTable';
@@ -11,7 +11,14 @@ export default function DeptDashboard() {
   const [error, setError]   = useState('');
   const [ok, setOk]         = useState('');
   const [refresh, setRefresh] = useState(0);
-    const { notifCount, recentPapers, markNotificationsSeen, markNotificationRead, clearHistory } = usePaperNotifications();
+  const { notifCount, recentPapers, markNotificationsSeen, markNotificationRead, clearHistory } = usePaperNotifications();
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void document.documentElement.offsetHeight;
+    }, 100);
+    return () => clearTimeout(timer);
+  }, []);
 
   const create = async (e) => {
     e.preventDefault(); setError(''); setOk('');

@@ -60,6 +60,13 @@ export default function Navbar({ title, sub, greeting, notifCount = 0, recentPap
   }, [user, greeting]);
 
   useEffect(() => {
+    const timer = setTimeout(() => {
+      void document.documentElement.offsetHeight;
+    }, 100);
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
     const tick = () => setDateTime(new Date());
     tick();
     const timer = setInterval(tick, 1000);
